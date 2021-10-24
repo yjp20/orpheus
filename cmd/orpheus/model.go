@@ -33,7 +33,7 @@ type Server struct {
 	Users map[string](*User)
 }
 
-var servers map[string](*Server)
+var servers = make(map[string]*Server)
 
 func sortServerQueue(server *Server) {
 	sort.Slice(server.Queue, func(i, j int) bool {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+    "time"
 )
 
 var (
@@ -14,4 +15,6 @@ func main() {
 	session := Login(*token)
 	session.Open()
 	session.AddHandler(commandHandler)
+    initCommands(session, "833278784848658462")
+    time.Sleep(time.Minute)
 }
