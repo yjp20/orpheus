@@ -2,29 +2,49 @@ package main
 
 import (
     "os/exec"
-    "strconv"
     "log"
+    "io"
+    "github.com/tcolgate/mp3"
+    "os"
     "strings"
 )
 
 //cache := map[string]Song
 
 func fetchMusicFromURL(url string) Song{
-    cmd := exec.Command("youtube-dl", "--id", "-x", url)
+    cmd := exec.Command("yt-dlp", "--id", "-x", "--audio-format", "mp3", "-P", "./data", url)
     err := cmd.Run()
     if err != nil {
         log.Fatal(err)
     }
-    title, err := exec.Command("youtube-dl", "--skip-download", "--get-title", "--no-warnings", url).Output()
+
+    staff, err := exec.Command("yt-dlp", "--skip-download", "--get-title", "--get-id", "--no-warnings", url).Output()
     if err != nil {
         log.Fatal(err)
     }
-    duration, err := exec.Command("youtube-dl", "--skip-download", "--get-duration", "--no-warnings", url).Output()
-    length := strings.Split(string(duration[:]), string(":"))
-    minute, _ := strconv.Atoi(length[0])
-    second, _ := strconv.Atoi(length[1])
-    id, err := exec.Command("youtube-dl", "--skip-download", "--get-id", "--no-warnings", url).Output()
-    f := string(id[:len(id)-1])+".m4a"
-    s := Song{string(title[:]), url, minute*60+second, f}
+    stuff := strings.Split(string(staff), "\n")
+    title := string(stuff[0])
+    fil := "./data/"+string(stuff[1])+".mp3"
+
+    t := 0.0
+    path, err := os.Open(fil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    d := mp3.NewDecoder(path)
+    var f mp3.Frame
+    skipped := 0
+
+    for {
+        if err := d.Decode(&f, &skipped); err != nil {
+            if err == io.EOF {
+                break
+            }
+        }
+        t = t + f.Duration().Seconds()
+    }
+    path, _ = os.Open(fil)
+
+    s := Song{title, url, t, path}
     return s
 }

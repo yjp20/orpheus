@@ -1,10 +1,14 @@
 package main
 
+import (
+    "os"
+)
+
 type Song struct {
     Name string
     URL string
-    Length int
-    File string
+    Length float64
+    File *os.File
 }
 
 type QueueItem struct {
