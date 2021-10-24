@@ -16,6 +16,6 @@ func main() {
 	session := Login(*token)
 	session.Open()
 	session.AddHandler(commandHandler)
-
+    initCommands(session, "833278784848658462")
 	serveAPI(session, *addr, *cors)
 }
