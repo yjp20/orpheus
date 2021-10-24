@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"encoding/binary"
 	"log"
 	"os"
 	"time"
 
-	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
-	"github.com/faiface/beep"
-	"github.com/faiface/beep/mp3"
+	mp3 "github.com/hajimehoshi/go-mp3"
+	"layeh.com/gopus"
 )
 
 func Login(token string) *discordgo.Session {
@@ -20,12 +21,11 @@ func Login(token string) *discordgo.Session {
 }
 
 type PlayInstance struct {
-	Playing    bool
-	Time       time.Duration
-	Target     *discordgo.VoiceConnection
-	Song       *Song
-	SongFormat beep.Format
-	SongSource beep.StreamSeekCloser
+	Playing bool
+	Time    time.Duration
+	Target  *discordgo.VoiceConnection
+	Song    *Song
+	kill    chan int
 }
 
 func NewPlayer(bot *discordgo.Session, guildId string, channelId string) (*PlayInstance, error) {
@@ -38,44 +38,45 @@ func NewPlayer(bot *discordgo.Session, guildId string, channelId string) (*PlayI
 		Time:    0,
 		Target:  voice,
 	}
-	go instance.startStream()
 	return &instance, nil
 }
 
-func (instance *PlayInstance) startStream() {
-	instance.Target.Speaking(true)
-	pcm := make(chan []int16)
-	dgvoice.SendPCM(instance.Target, pcm)
-	for {
-		data := make([][2]float64, 256)
-		_, ok := instance.SongSource.Stream(data)
-		if !ok {
-			break
-		}
-		pcmData := make([]int16, 256)
-		for i := 0; i < 256; i += 1 {
-			pcmData[i] = int16(data[i][0])
-		}
-		pcm <- pcmData
-	}
-	close(pcm)
-	instance.Target.Speaking(false)
-	instance.Target.Disconnect()
-}
-
 func (instance *PlayInstance) changeSong(song *Song) error {
+	if instance.kill != nil {
+		instance.kill <- 0
+	}
 	file, err := os.Open(song.File)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-
-	streamer, format, err := mp3.Decode(file)
+	decoder, err := mp3.NewDecoder(file)
 	if err != nil {
 		return err
 	}
+	instance.kill = make(chan int)
 	instance.Song = song
-	instance.SongFormat = format
-	instance.SongSource = streamer
+	go instance.streamAudio(decoder, instance.kill)
 	return nil
+}
+
+func (instance *PlayInstance) streamAudio(decoder *mp3.Decoder, kill chan int) {
+	instance.Target.Speaking(true)
+	encoder, _ := gopus.NewEncoder(48000, 2, gopus.Audio)
+	buffered := bufio.NewReader(decoder)
+	buffer16 := make([]int16, 960*2)
+	for {
+		select {
+		case <-kill:
+			goto done
+		default:
+			binary.Read(buffered, binary.LittleEndian, &buffer16)
+			res, err := encoder.Encode(buffer16, 960, 960*4)
+			if err != nil {
+				goto done
+			}
+			instance.Target.OpusSend <- res
+		}
+	}
+done:
+	instance.Target.Speaking(false)
 }
