@@ -47,7 +47,6 @@ func initCommands(s *discordgo.Session, guildId string) {
 }
 
 func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
-    println("HI")
     if addServer(m.GuildID) {
         initCommands(s, m.GuildID)
     }
@@ -57,7 +56,13 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
     switch m.ApplicationCommandData().Name {
     case "add":
-        add(m.GuildID, m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID)
+        song := add(m.GuildID, m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, s)
+        s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
+            Type: discordgo.InteractionResponseChannelMessageWithSource,
+            Data: &discordgo.InteractionResponseData{
+                Content: song.Name + " is now playing.",
+            },
+        })
     case "queue":
         server, _ := servers[m.GuildID]
         content := ""
@@ -70,6 +75,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
                 Content: content,
             },
         })
+    println("HI")
     }
 }
 
