@@ -4,6 +4,7 @@ import (
 	"log"
 	"sort"
 	"time"
+    "math"
 )
 
 type Song struct {
@@ -57,6 +58,7 @@ func getServers(access []string) []string {
 	return ans
 }
 
+// TODO: different types of add (smart-algo, add-end, add-next)
 func add(serverId string, url string, userId string) Song {
 	server, ok := servers[serverId]
 	if !ok {
@@ -68,10 +70,75 @@ func add(serverId string, url string, userId string) Song {
 		user = &User{make([](*QueueItem), 0, 10), userId, 0.0}
 		server.Users[userId] = user
 	}
-	item := QueueItem{s, userId, user.LengthSum}
+	item := QueueItem{s, userId, math.Max(user.LengthSum, server.Queue[server.Index].Index)+1}
 	user.LengthSum += s.Length.Seconds()
 	server.Queue = append(server.Queue, &item)
 	user.Songs = append(user.Songs, &item)
 	sortServerQueue(server)
 	return s
 }
+
+func skipTo(serverId string, index int) Song {
+    server, ok := servers[serverId]
+    if !ok {
+        log.Fatal()
+    }
+    if index >= len(server.Queue) || index < 0 {
+        log.Fatal()
+    }
+    server.Index = index
+    s := server.Queue[index].Song
+    return s
+}
+/*
+func move(serverId string, from_index int, to_index int) Song {
+    length = len(server.Queue)
+    server, ok := servers[serverId]
+    if !ok {
+        log.Fatal()
+    }
+    if from_index >= length || to_index >= length || from_index < 0 || to_index < 0 {
+        log.Fatal()
+    }
+    if to_index > from_index {
+        to_index -= 1
+    }
+    if from_index == to_index {
+        return server.Queue[from_index].Song
+    }
+    q := server.Queue[from_index]
+    if to_index == 0 {
+        q.Index = server.Queue[0].Index-1
+    }
+    else if to_index == length-1 {
+        q.Index = server.Queue[length-1].Index+1
+    }
+    else {
+        q.Index = (server.Queue[to_index].Index + server.Queue[to_index-1].Index)/2
+    }
+    temp := make([](*QueueItem), 0, 100)
+    temp = append(temp, server.Queue[:from_index]...)
+    temp = append(temp, server.Queue[from_index+1:]...)
+    server.Queue = make([](*QueueItem), 0, 100)
+    server.Queue = append(server.Queue, temp[:to_index]...)
+    server.Queue = append(server.Queue, q)
+    server.Queue = append(server.Queue, temp[to_index:]...)
+    if 
+}
+
+func remove(serverId string, index int) QueueItem {
+    server, ok := servers[serverId]
+    if !ok {
+        log.Fatal()
+    }
+    q := server.Queue[index]
+    temp := make([](*QueueItem), 0, 100)
+    temp = append(temp, server.Queue[:index]...)
+    server.Queue = append(temp, server.Queue[index+1:]...)
+    if index < server.Index {
+        server.Index -= 1
+    }
+    
+    return q
+}
+*/
