@@ -40,11 +40,13 @@ func sortServerQueue(server *Server) {
 	})
 }
 
-func addServer(id string) {
+func addServer(id string) bool {
 	_, ok := servers[id]
 	if !ok {
 		servers[id] = &Server{id, make([](*QueueItem), 0, 5), 0, make(map[string](*User))}
+		return true
 	}
+	return false
 }
 
 func getServers(access []string) []string {

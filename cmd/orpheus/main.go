@@ -9,6 +9,9 @@ var (
 )
 
 func main() {
+	flag.Parse()
+
 	session := Login(*token)
-	session.AddHandler(messageHandler)
+	session.Open()
+	session.AddHandler(commandHandler)
 }
