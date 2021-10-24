@@ -2,22 +2,24 @@ package main
 
 import (
 	"log"
+	"math"
 	"sort"
 	"time"
-    "math"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 type Song struct {
-	Name   string
-	URL    string
-	Length time.Duration
-	File   string
+	Name   string        `json:"name"`
+	URL    string        `json:"url"`
+	Length time.Duration `json:"length"`
+	File   string        `json:"file"`
 }
 
 type QueueItem struct {
-	Song     Song
-	QueuedBy string
-	Index    float64
+	Song     Song    `json:"song"`
+	QueuedBy string  `json:"queued_by"`
+	Index    float64 `json:"index"`
 }
 
 type User struct {
@@ -27,13 +29,13 @@ type User struct {
 }
 
 type Server struct {
-	Id    string
-	Queue [](*QueueItem)
-	Index int
-	Users map[string](*User)
+	Id    string             `json:"id"`
+	Queue []*QueueItem       `json:"queue"`
+	Index int                `json:"index"`
+	Users map[string](*User) `json:"-"`
 }
 
-var servers map[string](*Server)
+var servers = make(map[string]*Server)
 
 func sortServerQueue(server *Server) {
 	sort.Slice(server.Queue, func(i, j int) bool {
@@ -61,7 +63,7 @@ func getServers(access []string) []string {
 }
 
 // TODO: different types of add (smart-algo, add-end, add-next)
-func add(serverId string, url string, userId string) Song {
+func add(serverId string, url string, userId string, session *discordgo.Session) Song {
 	server, ok := servers[serverId]
 	if !ok {
 		log.Fatal()
@@ -72,26 +74,34 @@ func add(serverId string, url string, userId string) Song {
 		user = &User{make([](*QueueItem), 0, 10), userId, 0.0}
 		server.Users[userId] = user
 	}
-	item := QueueItem{s, userId, math.Max(user.LengthSum, server.Queue[server.Index].Index)+1}
+	var item QueueItem
+	if len(server.Queue) == 0 {
+		item = QueueItem{s, userId, user.LengthSum}
+	} else {
+		item = QueueItem{s, userId, math.Max(user.LengthSum, server.Queue[server.Index].Index) + 1}
+	}
 	user.LengthSum += s.Length.Seconds()
 	server.Queue = append(server.Queue, &item)
 	user.Songs = append(user.Songs, &item)
 	sortServerQueue(server)
+	instance, _ := NewPlayer(session, serverId, "833278784848658466")
+	instance.changeSong(&item.Song)
 	return s
 }
 
 func skipTo(serverId string, index int) Song {
-    server, ok := servers[serverId]
-    if !ok {
-        log.Fatal()
-    }
-    if index >= len(server.Queue) || index < 0 {
-        log.Fatal()
-    }
-    server.Index = index
-    s := server.Queue[index].Song
-    return s
+	server, ok := servers[serverId]
+	if !ok {
+		log.Fatal()
+	}
+	if index >= len(server.Queue) || index < 0 {
+		log.Fatal()
+	}
+	server.Index = index
+	s := server.Queue[index].Song
+	return s
 }
+
 /*
 func move(serverId string, from_index int, to_index int) Song {
     length = len(server.Queue)
@@ -125,33 +135,32 @@ func move(serverId string, from_index int, to_index int) Song {
     server.Queue = append(server.Queue, temp[:to_index]...)
     server.Queue = append(server.Queue, q)
     server.Queue = append(server.Queue, temp[to_index:]...)
-    if 
+    if
 }
 */
 func remove(serverId string, index int) *QueueItem {
-    server, ok := servers[serverId]
-    if !ok {
-        log.Fatal()
-    }
-    q := server.Queue[index]
-    temp := make([](*QueueItem), 0, 100)
-    temp = append(temp, server.Queue[:index]...)
-    server.Queue = append(temp, server.Queue[index+1:]...)
-    if index < server.Index {
-        server.Index -= 1
-    }
-    user, ok := server.Users[q.QueuedBy]
-    if !ok {
-        log.Fatal()
-    }
-    user.LengthSum -= q.Song.Length.Seconds()
-    for i, v := range user.Songs {
-        if v == q {
-            temp = make([](*QueueItem), 0, 100)
-            temp = append(temp, server.Queue[:i]...)
-            user.Songs = append(temp, server.Queue[i+1:]...)
-        }
-    }
-    return q
+	server, ok := servers[serverId]
+	if !ok {
+		log.Fatal()
+	}
+	q := server.Queue[index]
+	temp := make([](*QueueItem), 0, 100)
+	temp = append(temp, server.Queue[:index]...)
+	server.Queue = append(temp, server.Queue[index+1:]...)
+	if index < server.Index {
+		server.Index -= 1
+	}
+	user, ok := server.Users[q.QueuedBy]
+	if !ok {
+		log.Fatal()
+	}
+	user.LengthSum -= q.Song.Length.Seconds()
+	for i, v := range user.Songs {
+		if v == q {
+			temp = make([](*QueueItem), 0, 100)
+			temp = append(temp, server.Queue[:i]...)
+			user.Songs = append(temp, server.Queue[i+1:]...)
+		}
+	}
+	return q
 }
-
