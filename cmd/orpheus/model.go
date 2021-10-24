@@ -125,8 +125,8 @@ func move(serverId string, from_index int, to_index int) Song {
     server.Queue = append(server.Queue, temp[to_index:]...)
     if 
 }
-
-func remove(serverId string, index int) QueueItem {
+*/
+func remove(serverId string, index int) *QueueItem {
     server, ok := servers[serverId]
     if !ok {
         log.Fatal()
@@ -138,7 +138,18 @@ func remove(serverId string, index int) QueueItem {
     if index < server.Index {
         server.Index -= 1
     }
-    
+    user, ok := server.Users[q.QueuedBy]
+    if !ok {
+        log.Fatal()
+    }
+    user.LengthSum -= q.Song.Length.Seconds()
+    for i, v := range user.Songs {
+        if v == q {
+            temp = make([](*QueueItem), 0, 100)
+            temp = append(temp, server.Queue[:i]...)
+            user.Songs = append(temp, server.Queue[i+1:]...)
+        }
+    }
     return q
 }
-*/
+
