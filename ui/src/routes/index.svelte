@@ -4,8 +4,7 @@
 
 <script>
 	let servers = [
-		{ name: "future tft challengers", id : "1234" },
-		{ name: "future league challengers", id : "12342314" },
+		{ name: "calhacks orpheus", id : "833278784848658462" },
 	]
 </script>
 
