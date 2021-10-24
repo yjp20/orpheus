@@ -10,5 +10,10 @@
     "@sveltejs/kit": "next",
     "svelte": "^3.42.6"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "briefscss": "^2.4.0",
+    "cookie": "^0.4.1",
+    "js-cookie": "^3.0.1"
+  }
 }
