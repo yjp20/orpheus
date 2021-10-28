@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 var commands = []*discordgo.ApplicationCommand{
 	{Name: "join", Description: "Join channel"},
+	{Name: "queue", Description: "Show queue"},
+	{Name: "pause", Description: "Pause playing"},
+	{Name: "resume", Description: "Resume playing"},
 	{Name: "add", Description: "Adds a song to the queue",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
@@ -20,9 +24,6 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
-	{Name: "queue", Description: "Show queue"},
-	{Name: "pause", Description: "Pause playing"},
-	{Name: "resume", Description: "Resume playing"},
 	{Name: "fastforward", Description: "Goes forward a given amount of seconds",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
@@ -43,6 +44,16 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
+	{Name: "seek", Description: "Goes to a given amount of seconds",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "seconds",
+				Description: "number of seconds to seek to",
+				Required:    true,
+			},
+		},
+	},
 	{Name: "skip", Description: "Skips a song in the queue",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
@@ -59,7 +70,7 @@ var commands = []*discordgo.ApplicationCommand{
 				Type:        discordgo.ApplicationCommandOptionInteger,
 				Name:        "index",
 				Description: "index of song to remove",
-				Required:    true,
+				Required:    false,
 			},
 		},
 	},
@@ -84,12 +95,12 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	switch m.ApplicationCommandData().Name {
 	case "add":
-		song, err := add(m.GuildID, m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, s)
+		queueItem, err := add(m.GuildID, m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, s)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
 		}
-		response = song.Name + " is now playing."
+		response = formatSong(s, "Added ", server, queueItem)
 
 	case "queue":
 		response = ""
@@ -99,21 +110,26 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	case "pause":
 		server.Player.Pause()
-		response = fmt.Sprintf("Paused at (%.0f/%.0f)", server.Player.Time.Seconds(), server.Player.Song.Length.Seconds())
+		response = formatCurrentSong(s, "Pause", server)
 
 	case "resume":
 		server.Player.Resume()
-		response = "Resumed"
+		response = formatCurrentSong(s, "Resume", server)
 
 	case "fastforward":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		server.Player.FastForward(seconds)
-		response = "FF@15"
+		response = formatCurrentSong(s, "Fast-forward", server)
 
 	case "rewind":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		server.Player.FastForward(-seconds)
-		response = "Youtube Rewind"
+		response = formatCurrentSong(s, "Rewind", server)
+
+	case "seek":
+		seconds := m.ApplicationCommandData().Options[0].FloatValue()
+		server.Player.Seek(seconds)
+		response = formatCurrentSong(s, "Seek", server)
 
 	case "join":
 		guild, err := s.State.Guild(m.GuildID)
@@ -157,4 +173,35 @@ func joinHandler(s *discordgo.Session, m *discordgo.GuildCreate) {
 	if err != nil {
 		log.Printf("failed to init commands in guild '%s'\n%s\n", m.Guild.ID, err)
 	}
+}
+
+func formatCurrentSong(session *discordgo.Session, status string, server *Server) string {
+	queueItem := server.Queue[server.Index]
+	return fmt.Sprintf(
+		"%s **%s** (%s/%s)",
+		status,
+		queueItem.Song.Name,
+		formatDuration(server.Player.Time),
+		formatDuration(queueItem.Song.Length),
+	)
+}
+
+func formatSong(session *discordgo.Session, status string, server *Server, queueItem *QueueItem) string {
+	return fmt.Sprintf(
+		"%s **%s** (%s)",
+		status,
+		queueItem.Song.Name,
+		formatDuration(queueItem.Song.Length),
+	)
+}
+
+func formatDuration(duration time.Duration) string {
+	rawSeconds := int(duration.Seconds())
+	seconds := rawSeconds % 60
+	minutes := rawSeconds / 60 % 60
+	hours := rawSeconds / 60 / 60
+	if hours > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
+	}
+	return fmt.Sprintf("%d:%02d", minutes, seconds)
 }

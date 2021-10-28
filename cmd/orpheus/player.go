@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -31,6 +30,7 @@ type playerProcess struct {
 	exit   chan int
 	pause  chan int
 	resume chan int
+	seek   chan int
 }
 
 func (p *Player) PlaySong(song *Song) error {
@@ -56,9 +56,23 @@ func (p *Player) Pause() {
 }
 
 func (p *Player) FastForward(seconds float64) {
-	p.killWorker()
 	p.Time = p.clampTime(p.Time + time.Duration(float64(time.Second)*seconds))
-	p.startWorker()
+	if p.process != nil {
+		p.process.seek <- 0
+	}
+}
+
+func (p *Player) Seek(seconds float64) {
+	p.Time = p.clampTime(time.Duration(float64(time.Second) * seconds))
+	if p.process != nil {
+		p.process.seek <- 0
+	}
+}
+
+func (p *Player) seek(decoder *mp3.Decoder) error {
+	offset := BYTES_IN_FRAME * (int64(p.Time) / (int64(time.Second) / int64(decoder.SampleRate())))
+	_, err := decoder.Seek(offset, io.SeekStart)
+	return err
 }
 
 func (p *Player) killWorker() {
@@ -86,22 +100,18 @@ func (p *Player) startWorker() error {
 	if err != nil {
 		return err
 	}
-	offset := BYTES_IN_FRAME * (int64(p.Time) / (int64(time.Second) / int64(decoder.SampleRate())))
-	_, err = decoder.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	bufferedAudio := bufio.NewReader(decoder)
-	go p.audioWorker(bufferedAudio)
+	p.seek(decoder)
+	go p.audioWorker(decoder)
 	return nil
 }
 
-func (p *Player) audioWorker(decoder io.Reader) {
+func (p *Player) audioWorker(decoder *mp3.Decoder) {
 	process := &playerProcess{
 		kill:   make(chan int),
 		exit:   make(chan int),
 		pause:  make(chan int),
 		resume: make(chan int),
+		seek:   make(chan int),
 	}
 	p.process = process
 	killed := false
@@ -125,6 +135,8 @@ playing:
 			continue
 		case <-process.pause:
 			goto paused
+		case <-process.seek:
+			p.seek(decoder)
 
 		default:
 			binary.Read(decoder, binary.LittleEndian, &buffer16)
@@ -132,7 +144,7 @@ playing:
 			if err != nil {
 				goto cleanup
 			}
-			p.Time += time.Duration(int64(time.Second) / int64(48000) * int64(len(buffer16)) / BYTES_IN_FRAME)
+			p.Time += time.Duration(int64(time.Second) / int64(decoder.SampleRate()) * int64(len(buffer16)) / BYTES_IN_FRAME)
 			p.Voice.OpusSend <- res
 		}
 	}
@@ -146,6 +158,8 @@ paused:
 			goto cleanup
 		case <-process.resume:
 			goto playing
+		case <-process.seek:
+			p.seek(decoder)
 		case <-process.pause:
 			continue
 		}
@@ -161,6 +175,7 @@ cleanup:
 	close(process.exit)
 	close(process.pause)
 	close(process.resume)
+	close(process.seek)
 }
 
 func (p *Player) clampTime(t time.Duration) time.Duration {
