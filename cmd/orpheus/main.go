@@ -9,6 +9,7 @@ import (
 
 var (
 	token = flag.String("token", "", "token of discord bot")
+	appID = flag.String("appID", "", "appID of discord bot")
 	addr  = flag.String("addr", ":4000", "address of bot api")
 	cors  = flag.String("cors", "http://localhost:3000", "cors")
 )
