@@ -67,7 +67,7 @@ func getServers(access []string) []string {
 }
 
 // TODO: different types of add (smart-algo, add-end, add-next)
-func add(serverId string, url string, userId string, session *discordgo.Session) (Song, error) {
+func add(serverId string, url string, userId string, session *discordgo.Session) (*QueueItem, error) {
 	server, ok := servers[serverId]
 	if !ok {
 		log.Fatal()
@@ -90,7 +90,7 @@ func add(serverId string, url string, userId string, session *discordgo.Session)
 	sortServerQueue(server)
 
 	err := server.Player.PlaySong(&item.Song)
-	return s, err
+	return &item, err
 }
 
 func skipTo(serverId string, index int) Song {
