@@ -95,12 +95,19 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	switch m.ApplicationCommandData().Name {
 	case "add":
+		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		})
+
 		queueItem, err := add(m.GuildID, m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, s)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
 		}
-		response = formatSong(s, "Added ", server, queueItem)
+
+		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
+			Content: formatSong(s, "Added ", server, queueItem),
+		})
 
 	case "queue":
 		response = ""
@@ -156,12 +163,14 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		response = fmt.Sprintf("Joining channel '%s'", channel.Name)
 	}
 
-	s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: response,
-		},
-	})
+	if response != "" {
+		s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: response,
+			},
+		})
+	}
 }
 
 func joinHandler(s *discordgo.Session, m *discordgo.GuildCreate) {
