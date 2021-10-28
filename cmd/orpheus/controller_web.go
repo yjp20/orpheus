@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
@@ -96,7 +95,7 @@ func (app *App) badRequestResponse(w http.ResponseWriter, err error) {
 	app.writeError(w, http.StatusBadRequest, err.Error())
 }
 
-func serveAPI(session *discordgo.Session, addr, cors string) {
+func serverAPI(session *discordgo.Session, addr, cors string) *http.Server {
 	app := &App{
 		Addr:    addr,
 		Origins: strings.Split(cors, ","),
@@ -104,7 +103,7 @@ func serveAPI(session *discordgo.Session, addr, cors string) {
 	}
 
 	router := httprouter.New()
-	router.GET("/api/queue", app.getQueue)
+	router.GET("/api/queue", app.getServer)
 	router.POST("/api/queue", app.addQueue)
 
 	srv := &http.Server{
@@ -112,7 +111,7 @@ func serveAPI(session *discordgo.Session, addr, cors string) {
 		Handler: app.enableCORS(router),
 	}
 
-	srv.ListenAndServe()
+	return srv
 }
 
 func (a *App) enableCORS(next http.Handler) http.Handler {
@@ -150,22 +149,15 @@ func (app *App) addQueue(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		app.badRequestResponse(w, err)
 	}
 
-	log.Printf("%v+", input)
-	println(input.GuildId)
-
-	song := add(input.GuildId, input.Url, input.UserId, app.Session)
+	song, _ := add(input.GuildId, input.Url, input.UserId, app.Session)
 	app.writeJSON(w, 200, &song)
 }
 
-func (app *App) getQueue(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (app *App) getServer(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var input struct {
 		GuildId string `json:"guild_id"`
 	}
 
 	input.GuildId = r.URL.Query().Get("guild_id")
-	println(input.GuildId)
-	if addServer(input.GuildId) {
-		initCommands(app.Session, input.GuildId)
-	}
 	app.writeJSON(w, 200, servers[input.GuildId])
 }

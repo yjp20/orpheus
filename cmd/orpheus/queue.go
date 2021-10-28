@@ -29,10 +29,11 @@ type User struct {
 }
 
 type Server struct {
-	Id    string             `json:"id"`
-	Queue []*QueueItem       `json:"queue"`
-	Index int                `json:"index"`
-	Users map[string](*User) `json:"-"`
+	Id     string             `json:"id"`
+	Queue  []*QueueItem       `json:"queue"`
+	Index  int                `json:"index"`
+	Users  map[string](*User) `json:"-"`
+	Player Player
 }
 
 var servers = make(map[string]*Server)
@@ -43,13 +44,16 @@ func sortServerQueue(server *Server) {
 	})
 }
 
-func addServer(id string) bool {
+func addServer(id string) {
 	_, ok := servers[id]
 	if !ok {
-		servers[id] = &Server{id, make([](*QueueItem), 0, 5), 0, make(map[string](*User))}
-		return true
+		servers[id] = &Server{
+			Id:    id,
+			Queue: make([]*QueueItem, 0),
+			Index: 0,
+			Users: make(map[string](*User)),
+		}
 	}
-	return false
 }
 
 func getServers(access []string) []string {
@@ -63,7 +67,7 @@ func getServers(access []string) []string {
 }
 
 // TODO: different types of add (smart-algo, add-end, add-next)
-func add(serverId string, url string, userId string, session *discordgo.Session) Song {
+func add(serverId string, url string, userId string, session *discordgo.Session) (Song, error) {
 	server, ok := servers[serverId]
 	if !ok {
 		log.Fatal()
@@ -84,9 +88,9 @@ func add(serverId string, url string, userId string, session *discordgo.Session)
 	server.Queue = append(server.Queue, &item)
 	user.Songs = append(user.Songs, &item)
 	sortServerQueue(server)
-	instance, _ := NewPlayer(session, serverId, "833278784848658466")
-	instance.changeSong(&item.Song)
-	return s
+
+	err := server.Player.PlaySong(&item.Song)
+	return s, err
 }
 
 func skipTo(serverId string, index int) Song {

@@ -2,6 +2,9 @@ package main
 
 import (
 	"flag"
+	"log"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 var (
@@ -13,9 +16,20 @@ var (
 func main() {
 	flag.Parse()
 
-	session := Login(*token)
-	session.Open()
+	session, err := discordgo.New("Bot " + *token)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = session.Open()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Discord command-based controller
 	session.AddHandler(commandHandler)
-    initCommands(session, "833278784848658462")
-	serveAPI(session, *addr, *cors)
+	session.AddHandler(joinHandler)
+
+	// Web-based controller
+	server := serverAPI(session, *addr, *cors)
+	server.ListenAndServe()
 }
