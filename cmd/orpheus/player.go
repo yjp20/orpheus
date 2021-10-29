@@ -113,15 +113,12 @@ func (p *Player) audioWorker(decoder *mp3.Decoder) {
 		resume: make(chan int),
 		seek:   make(chan int),
 	}
-	sampleRate := decoder.SampleRate()
-	frameSize := sampleRate / 50
 	p.process = process
 	killed := false
+	sampleRate := decoder.SampleRate()
+	frameSize := sampleRate / 50
 	encoder, _ := gopus.NewEncoder(sampleRate, 2, gopus.Audio)
 	buffer16 := make([]int16, frameSize*2)
-
-	println(sampleRate)
-	println(frameSize)
 
 	if p.Playing {
 		goto playing

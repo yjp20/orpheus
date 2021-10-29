@@ -33,9 +33,8 @@ func fetchMusicFromURL(url string) (*Song, error) {
 	if sampleRate != 48000 {
 		tempPath := "/tmp/" + id + ".mp3"
 		resampleProcess := exec.Command("ffmpeg", "-i", path, "-ar", "48000", tempPath)
-		out, err := resampleProcess.CombinedOutput()
+		err = resampleProcess.Run()
 		if err != nil {
-			println(string(out))
 			return nil, err
 		}
 		err = os.Rename(tempPath, path)
