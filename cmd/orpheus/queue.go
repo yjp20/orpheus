@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"sort"
@@ -17,7 +18,7 @@ type Song struct {
 }
 
 type QueueItem struct {
-	Song     Song    `json:"song"`
+	Song     *Song   `json:"song"`
 	QueuedBy string  `json:"queued_by"`
 	Index    float64 `json:"index"`
 }
@@ -70,9 +71,12 @@ func getServers(access []string) []string {
 func add(serverId string, url string, userId string, session *discordgo.Session) (*QueueItem, error) {
 	server, ok := servers[serverId]
 	if !ok {
-		log.Fatal()
+		return nil, fmt.Errorf("serverId not in server list")
 	}
-	s := fetchMusicFromURL(url)
+	s, err := fetchMusicFromURL(url)
+	if err != nil {
+		return nil, err
+	}
 	user, ok := server.Users[userId]
 	if !ok {
 		user = &User{make([](*QueueItem), 0, 10), userId, 0.0}
@@ -89,21 +93,20 @@ func add(serverId string, url string, userId string, session *discordgo.Session)
 	user.Songs = append(user.Songs, &item)
 	sortServerQueue(server)
 
-	err := server.Player.PlaySong(&item.Song)
+	err = server.Player.PlaySong(item.Song)
 	return &item, err
 }
 
-func skipTo(serverId string, index int) Song {
+func skipTo(serverId string, index int) (*QueueItem, error) {
 	server, ok := servers[serverId]
 	if !ok {
-		log.Fatal()
+		return nil, fmt.Errorf("serverId not in server list")
 	}
 	if index >= len(server.Queue) || index < 0 {
-		log.Fatal()
+		return nil, fmt.Errorf("index out of bounds")
 	}
 	server.Index = index
-	s := server.Queue[index].Song
-	return s
+	return server.Queue[index], nil
 }
 
 /*

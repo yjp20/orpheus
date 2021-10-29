@@ -113,10 +113,15 @@ func (p *Player) audioWorker(decoder *mp3.Decoder) {
 		resume: make(chan int),
 		seek:   make(chan int),
 	}
+	sampleRate := decoder.SampleRate()
+	frameSize := sampleRate / 50
 	p.process = process
 	killed := false
-	encoder, _ := gopus.NewEncoder(48000, 2, gopus.Audio)
-	buffer16 := make([]int16, 960*2)
+	encoder, _ := gopus.NewEncoder(sampleRate, 2, gopus.Audio)
+	buffer16 := make([]int16, frameSize*2)
+
+	println(sampleRate)
+	println(frameSize)
 
 	if p.Playing {
 		goto playing
@@ -140,7 +145,7 @@ playing:
 
 		default:
 			binary.Read(decoder, binary.LittleEndian, &buffer16)
-			res, err := encoder.Encode(buffer16, 960, 960*4)
+			res, err := encoder.Encode(buffer16, frameSize, frameSize*4)
 			if err != nil {
 				goto cleanup
 			}

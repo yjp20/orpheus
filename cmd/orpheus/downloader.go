@@ -1,56 +1,62 @@
 package main
 
 import (
-	"io"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
-	"github.com/tcolgate/mp3"
+	mp3 "github.com/hajimehoshi/go-mp3"
 )
 
-func fetchMusicFromURL(url string) Song {
+func fetchMusicFromURL(url string) (*Song, error) {
+	metaDataProcess := exec.Command("yt-dlp", "--skip-download", "--get-title", "--get-id", "--no-warnings", url)
+	metaData, err := metaDataProcess.Output()
+	if err != nil {
+		return nil, err
+	}
+	tokens := strings.Split(string(metaData), "\n")
+	title, id := tokens[0], tokens[1]
+	path := "./data/" + id + ".mp3"
+
 	downloadProcess := exec.Command("yt-dlp", "--id", "-x", "--audio-format", "mp3", "-P", "./data", url)
-	err := downloadProcess.Run()
+	err = downloadProcess.Run()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	titleProcess := exec.Command("yt-dlp", "--skip-download", "--get-title", "--get-id", "--no-warnings", url)
-	titleString, err := titleProcess.Output()
+	sampleRate, length, err := getMP3MetaData(path)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	tokens := strings.Split(string(titleString), "\n")
-	title := string(tokens[0])
-	path := "./data/" + string(tokens[1]) + ".mp3"
 
-	file, err := os.Open(path)
-	if err != nil {
-		log.Fatal(err)
+	if sampleRate != 48000 {
+		tempPath := "/tmp/" + id + ".mp3"
+		resampleProcess := exec.Command("ffmpeg", "-i", path, "-ar", "48000", tempPath)
+		out, err := resampleProcess.CombinedOutput()
+		if err != nil {
+			println(string(out))
+			return nil, err
+		}
+		err = os.Rename(tempPath, path)
+		if err != nil {
+			return nil, err
+		}
 	}
-	length := getMP3Length(file)
 
-	s := Song{title, url, length, path}
-	return s
+	return &Song{title, url, length, path}, nil
 }
 
-func getMP3Length(file *os.File) time.Duration {
-	d := mp3.NewDecoder(file)
-	var f mp3.Frame
-	length := time.Duration(0)
-	skipped := 0
-
-	for {
-		if err := d.Decode(&f, &skipped); err != nil {
-			if err == io.EOF {
-				break
-			}
-		}
-		length = length + f.Duration()
+func getMP3MetaData(path string) (sampleRate int, length time.Duration, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return
 	}
-
-	return length
+	d, err := mp3.NewDecoder(file)
+	if err != nil {
+		return
+	}
+	sampleRate = d.SampleRate()
+	length = time.Duration(d.Length() * int64(time.Second) / int64(sampleRate) / 4)
+	return
 }
