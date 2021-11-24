@@ -1,56 +1,90 @@
 package main
 
 import (
-	"io"
-	"log"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/tcolgate/mp3"
+	mp3 "github.com/hajimehoshi/go-mp3"
 )
 
-func fetchMusicFromURL(url string) Song {
+func fetchSongFromURL(url string) (song *Song, err error) {
+	metaDataProcess := exec.Command("yt-dlp", "--print", "%(title)s\n%(id)s\n%(duration)d", "--no-warnings", url)
+	metaData, err := metaDataProcess.Output()
+	if err != nil {
+		return nil, err
+	}
+	tokens := strings.Split(string(metaData), "\n")
+	song = &Song{
+		Name:         tokens[0],
+		ID:           tokens[1],
+		File:         "./data/" + tokens[1] + ".mp3",
+		IsDownloaded: true,
+		download:     make(chan int),
+	}
+
+	if _, err := os.Stat(song.File); errors.Is(err, os.ErrNotExist) {
+		song.IsDownloaded = false
+		go downloadSong(url, song)
+	}
+
+	if song.IsDownloaded {
+		_, song.Length, err = getMP3MetaData(song.File)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		seconds, err := strconv.Atoi(tokens[2])
+		song.Length = time.Second * time.Duration(seconds)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return song, nil
+}
+
+func downloadSong(url string, song *Song) error {
 	downloadProcess := exec.Command("yt-dlp", "--id", "-x", "--audio-format", "mp3", "-P", "./data", url)
 	err := downloadProcess.Run()
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("Failed to download '%s'\nerror: %s\n", url, err.Error())
+	}
+	var sampleRate int
+	sampleRate, song.Length, err = getMP3MetaData(song.File)
+	if sampleRate != 48000 {
+		tempPath := "/tmp/" + song.ID + ".mp3"
+		resampleProcess := exec.Command("ffmpeg", "-i", song.File, "-ar", "48000", tempPath)
+		err = resampleProcess.Run()
+		if err != nil {
+			return err
+		}
+		err = os.Rename(tempPath, song.File)
+		if err != nil {
+			return err
+		}
 	}
 
-	titleProcess := exec.Command("yt-dlp", "--skip-download", "--get-title", "--get-id", "--no-warnings", url)
-	titleString, err := titleProcess.Output()
-	if err != nil {
-		log.Fatal(err)
-	}
-	tokens := strings.Split(string(titleString), "\n")
-	title := string(tokens[0])
-	path := "./data/" + string(tokens[1]) + ".mp3"
-
-	file, err := os.Open(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	length := getMP3Length(file)
-
-	s := Song{title, url, length, path}
-	return s
+	song.IsDownloaded = true
+	song.download <- 0
+	close(song.download)
+	return nil
 }
 
-func getMP3Length(file *os.File) time.Duration {
-	d := mp3.NewDecoder(file)
-	var f mp3.Frame
-	length := time.Duration(0)
-	skipped := 0
-
-	for {
-		if err := d.Decode(&f, &skipped); err != nil {
-			if err == io.EOF {
-				break
-			}
-		}
-		length = length + f.Duration()
+func getMP3MetaData(path string) (sampleRate int, length time.Duration, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return
 	}
-
-	return length
+	d, err := mp3.NewDecoder(file)
+	if err != nil {
+		return
+	}
+	sampleRate = d.SampleRate()
+	length = time.Duration(d.Length() * int64(time.Second) / int64(sampleRate) / 4)
+	return
 }

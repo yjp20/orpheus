@@ -4,7 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -12,7 +14,7 @@ import (
 	"layeh.com/gopus"
 )
 
-var (
+const (
 	BYTES_IN_FRAME = int64(4)
 )
 
@@ -21,52 +23,74 @@ type Player struct {
 	Time     time.Duration
 	Song     *Song
 	Voice    *discordgo.VoiceConnection
-	Callback *func(killed bool)
-	process  *playerProcess
+	Callback func(killed bool)
+
+	events chan playerEvent
+	mu     sync.Mutex
 }
 
-type playerProcess struct {
-	kill   chan int
-	exit   chan int
-	pause  chan int
-	resume chan int
-	seek   chan int
-}
+type playerEvent int
+
+const (
+	kill playerEvent = iota
+	pause
+	resume
+	seek
+)
 
 func (p *Player) PlaySong(song *Song) error {
 	p.killWorker()
+
+	p.mu.Lock()
 	p.Playing = true
 	p.Song = song
 	p.Time = 0
-	return p.startWorker()
+	p.mu.Unlock()
+
+	err := p.startWorker()
+	if err != nil {
+		log.Println(err)
+	}
+	return err
 }
 
 func (p *Player) Resume() {
-	if p.process != nil {
+	p.mu.Lock()
+	if p.events != nil {
 		p.Playing = true
-		p.process.resume <- 0
+		p.mu.Unlock()
+		p.events <- resume
 	}
+	p.mu.Unlock()
 }
 
 func (p *Player) Pause() {
-	if p.process != nil {
+	p.mu.Lock()
+	if p.events != nil {
 		p.Playing = false
-		p.process.pause <- 0
+		p.mu.Unlock()
+		p.events <- pause
 	}
+	p.mu.Unlock()
 }
 
 func (p *Player) FastForward(seconds float64) {
+	p.mu.Lock()
 	p.Time = p.clampTime(p.Time + time.Duration(float64(time.Second)*seconds))
-	if p.process != nil {
-		p.process.seek <- 0
+	if p.events != nil {
+		p.mu.Unlock()
+		p.events <- seek
 	}
+	p.mu.Unlock()
 }
 
 func (p *Player) Seek(seconds float64) {
+	p.mu.Lock()
 	p.Time = p.clampTime(time.Duration(float64(time.Second) * seconds))
-	if p.process != nil {
-		p.process.seek <- 0
+	if p.events != nil {
+		p.events <- seek
 	}
+	p.mu.Unlock()
 }
 
 func (p *Player) seek(decoder *mp3.Decoder) error {
@@ -76,12 +100,13 @@ func (p *Player) seek(decoder *mp3.Decoder) error {
 }
 
 func (p *Player) killWorker() {
-	if p.process != nil {
-		process := p.process
-		p.process = nil
-		process.kill <- 0
-		<-process.exit
+	p.mu.Lock()
+	if p.events != nil {
+		events := p.events
+		p.events = nil
+		events <- kill
 	}
+	p.mu.Unlock()
 }
 
 func (p *Player) startWorker() error {
@@ -92,6 +117,10 @@ func (p *Player) startWorker() error {
 		return fmt.Errorf("player must have voice channel initialized")
 	}
 
+	if !p.Song.IsDownloaded {
+		<-p.Song.download
+	}
+
 	file, err := os.Open(p.Song.File)
 	if err != nil {
 		return err
@@ -100,23 +129,25 @@ func (p *Player) startWorker() error {
 	if err != nil {
 		return err
 	}
-	p.seek(decoder)
+	err = p.seek(decoder)
+	if err != nil {
+		return err
+	}
+
 	go p.audioWorker(decoder)
 	return nil
 }
 
 func (p *Player) audioWorker(decoder *mp3.Decoder) {
-	process := &playerProcess{
-		kill:   make(chan int),
-		exit:   make(chan int),
-		pause:  make(chan int),
-		resume: make(chan int),
-		seek:   make(chan int),
-	}
-	p.process = process
 	killed := false
-	encoder, _ := gopus.NewEncoder(48000, 2, gopus.Audio)
-	buffer16 := make([]int16, 960*2)
+	events := make(chan playerEvent)
+	p.mu.Lock()
+	p.events = events
+	p.mu.Unlock()
+	sampleRate := decoder.SampleRate()
+	frameSize := sampleRate / 50
+	encoder, _ := gopus.NewEncoder(sampleRate, 2, gopus.Audio)
+	buffer16 := make([]int16, frameSize*2)
 
 	if p.Playing {
 		goto playing
@@ -128,19 +159,25 @@ playing:
 	p.Voice.Speaking(true)
 	for {
 		select {
-		case <-process.kill:
-			killed = true
-			goto cleanup
-		case <-process.resume:
-			continue
-		case <-process.pause:
-			goto paused
-		case <-process.seek:
-			p.seek(decoder)
+		case e := <-events:
+			switch e {
+			case kill:
+				killed = true
+				goto cleanup
+			case resume:
+				continue
+			case pause:
+				goto paused
+			case seek:
+				p.seek(decoder)
+			}
 
 		default:
-			binary.Read(decoder, binary.LittleEndian, &buffer16)
-			res, err := encoder.Encode(buffer16, 960, 960*4)
+			err := binary.Read(decoder, binary.LittleEndian, &buffer16)
+			if err != nil {
+				goto cleanup
+			}
+			res, err := encoder.Encode(buffer16, frameSize, frameSize*4)
 			if err != nil {
 				goto cleanup
 			}
@@ -153,29 +190,27 @@ paused:
 	p.Voice.Speaking(false)
 	for {
 		select {
-		case <-process.kill:
-			killed = true
-			goto cleanup
-		case <-process.resume:
-			goto playing
-		case <-process.seek:
-			p.seek(decoder)
-		case <-process.pause:
-			continue
+		case e := <-events:
+			switch e {
+			case kill:
+				killed = true
+				goto cleanup
+			case resume:
+				goto playing
+			case pause:
+				continue
+			case seek:
+				p.seek(decoder)
+			}
 		}
 	}
 
 cleanup:
 	p.Voice.Speaking(false)
 	if p.Callback != nil {
-		(*p.Callback)(killed)
+		go p.Callback(killed)
 	}
-	process.exit <- 0
-	close(process.kill)
-	close(process.exit)
-	close(process.pause)
-	close(process.resume)
-	close(process.seek)
+	close(events)
 }
 
 func (p *Player) clampTime(t time.Duration) time.Duration {

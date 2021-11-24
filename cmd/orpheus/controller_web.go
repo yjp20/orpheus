@@ -139,7 +139,7 @@ func (a *App) enableCORS(next http.Handler) http.Handler {
 
 func (app *App) addQueue(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var input struct {
-		GuildId string `json:"guild_id"`
+		GuildID string `json:"guild_id"`
 		Url     string `json:"url"`
 		UserId  string `json:"user_id"`
 	}
@@ -149,15 +149,16 @@ func (app *App) addQueue(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		app.badRequestResponse(w, err)
 	}
 
-	song, _ := add(input.GuildId, input.Url, input.UserId, app.Session)
+	server := getServer(input.GuildID)
+	song, _ := server.Add(input.Url, input.UserId, app.Session)
 	app.writeJSON(w, 200, &song)
 }
 
 func (app *App) getServer(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var input struct {
-		GuildId string `json:"guild_id"`
+		GuildID string `json:"guild_id"`
 	}
 
-	input.GuildId = r.URL.Query().Get("guild_id")
-	app.writeJSON(w, 200, servers[input.GuildId])
+	input.GuildID = r.URL.Query().Get("guild_id")
+	app.writeJSON(w, 200, getServer(input.GuildID))
 }
