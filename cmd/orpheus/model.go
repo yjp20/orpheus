@@ -1,0 +1,65 @@
+package main
+
+import (
+	"time"
+)
+
+type Server struct {
+	ID         string       `json:"id"`
+	Queue      []*QueueItem `json:"queue"`
+	Index      int          `json:"index"`
+	Player     Player
+	NextPolicy NextPolicy
+}
+
+type QueueItem struct {
+	Song     *Song  `json:"song"`
+	QueuedBy string `json:"queued_by"`
+	Dynamic  bool   `json:"dynamic"`
+	Index    int64  `json:"index"`
+}
+
+type Song struct {
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	URL          string        `json:"url"`
+	Length       time.Duration `json:"length"`
+	File         string        `json:"file"`
+	IsDownloaded bool          `json:"is_downloaded"`
+
+	download chan int
+}
+
+type NextPolicy int
+
+const (
+	LoopSong NextPolicy = iota
+	LoopQueue
+	NoLoop
+)
+
+var servers = make(map[string]*Server)
+
+func getServer(id string) *Server {
+	_, ok := servers[id]
+	if !ok {
+		servers[id] = &Server{
+			ID:    id,
+			Queue: make([]*QueueItem, 0),
+			Index: 0,
+			NextPolicy: LoopQueue,
+		}
+		servers[id].Player.Callback = servers[id].nextSong
+	}
+	return servers[id]
+}
+
+func unionServers(serverIDs []string) []string {
+	ans := make([]string, 0)
+	for _, id := range serverIDs {
+		if _, ok := servers[id]; ok {
+			ans = append(ans, id)
+		}
+	}
+	return ans
+}

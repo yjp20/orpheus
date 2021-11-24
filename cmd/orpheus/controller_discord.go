@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -91,29 +91,33 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 	//perms>>discordgo.PermissionAdministrator&1 == 1
 
 	var response string
-	server, _ := servers[m.GuildID]
+	server := getServer(m.GuildID)
 
 	switch m.ApplicationCommandData().Name {
 	case "add":
 		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		})
-
-		queueItem, err := add(m.GuildID, m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, s)
+		queueItem, err := server.Add(m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, s)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
 		}
-
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong(s, "Added ", server, queueItem),
+			Content: formatSong(s, "Added", server, queueItem),
 		})
 
 	case "queue":
-		response = ""
-		for i, v := range server.Queue {
-			response += strconv.Itoa(i) + ".  " + v.Song.Name + "\n"
+		lines := make([]string, 0)
+		for index, queueItem := range server.Queue {
+			indexString := fmt.Sprintf("%d. ", index)
+			if index == server.Index {
+				lines = append(lines, formatCurrentSong(s, indexString, server))
+			} else {
+				lines = append(lines, formatSong(s, indexString, server, queueItem))
+			}
 		}
+		response = strings.Join(lines, "\n")
 
 	case "pause":
 		server.Player.Pause()
@@ -137,6 +141,23 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		server.Player.Seek(seconds)
 		response = formatCurrentSong(s, "Seek", server)
+
+	case "skip":
+		skip := 1
+		if len(m.ApplicationCommandData().Options) >= 1 {
+			skip = int(m.ApplicationCommandData().Options[0].IntValue())
+		}
+		index := (server.Index + skip) % len(server.Queue)
+		server.SkipTo(index)
+		response = formatCurrentSong(s, "Rewind", server)
+
+	case "remove":
+		index := server.Index
+		if len(m.ApplicationCommandData().Options) >= 1 {
+			index = int(m.ApplicationCommandData().Options[0].IntValue())
+		}
+		server.Remove(index)
+		response = formatCurrentSong(s, "Rewind", server)
 
 	case "join":
 		guild, err := s.State.Guild(m.GuildID)
@@ -177,7 +198,7 @@ func joinHandler(s *discordgo.Session, m *discordgo.GuildCreate) {
 	if m.Guild.Unavailable {
 		return
 	}
-	addServer(m.Guild.ID)
+	getServer(m.Guild.ID)
 	err := initCommands(s, m.Guild.ID)
 	if err != nil {
 		log.Printf("failed to init commands in guild '%s'\n%s\n", m.Guild.ID, err)
