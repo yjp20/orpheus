@@ -74,6 +74,7 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
+	{Name: "shuffle", Description: "Shuffles the queue",},
 }
 
 func initCommands(s *discordgo.Session, guildId string) error {
@@ -98,49 +99,40 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		})
-		queueItem, err := server.Add(m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, s)
+		queueItem, err := server.Add(m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
 		}
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong(s, "Added", server, queueItem),
+			Content: formatSong("Added", server, queueItem),
 		})
 
 	case "queue":
-		lines := make([]string, 0)
-		for index, queueItem := range server.Queue {
-			indexString := fmt.Sprintf("%d. ", index)
-			if index == server.Index {
-				lines = append(lines, formatCurrentSong(s, indexString, server))
-			} else {
-				lines = append(lines, formatSong(s, indexString, server, queueItem))
-			}
-		}
-		response = strings.Join(lines, "\n")
+		response = PrintQueue(server)
 
 	case "pause":
 		server.Player.Pause()
-		response = formatCurrentSong(s, "Pause", server)
+		response = formatCurrentSong("Pause", server)
 
 	case "resume":
 		server.Player.Resume()
-		response = formatCurrentSong(s, "Resume", server)
+		response = formatCurrentSong("Resume", server)
 
 	case "fastforward":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		server.Player.FastForward(seconds)
-		response = formatCurrentSong(s, "Fast-forward", server)
+		response = formatCurrentSong("Fast-forward", server)
 
 	case "rewind":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		server.Player.FastForward(-seconds)
-		response = formatCurrentSong(s, "Rewind", server)
+		response = formatCurrentSong("Rewind", server)
 
 	case "seek":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		server.Player.Seek(seconds)
-		response = formatCurrentSong(s, "Seek", server)
+		response = formatCurrentSong("Seek", server)
 
 	case "skip":
 		skip := 1
@@ -149,7 +141,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		}
 		index := (server.Index + skip) % len(server.Queue)
 		server.SkipTo(index)
-		response = formatCurrentSong(s, "Rewind", server)
+		response = formatCurrentSong("Rewind", server)
 
 	case "remove":
 		index := server.Index
@@ -157,7 +149,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			index = int(m.ApplicationCommandData().Options[0].IntValue())
 		}
 		server.Remove(index)
-		response = formatCurrentSong(s, "Rewind", server)
+		response = formatCurrentSong("Rewind", server)
 
 	case "join":
 		guild, err := s.State.Guild(m.GuildID)
@@ -182,6 +174,10 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			return
 		}
 		response = fmt.Sprintf("Joining channel '%s'", channel.Name)
+
+	case "shuffle":
+		server.Shuffle()
+		response = fmt.Sprintf("Shuffling the queue...")
 	}
 
 	if response != "" {
@@ -205,7 +201,7 @@ func joinHandler(s *discordgo.Session, m *discordgo.GuildCreate) {
 	}
 }
 
-func formatCurrentSong(session *discordgo.Session, status string, server *Server) string {
+func formatCurrentSong(status string, server *Server) string {
 	queueItem := server.Queue[server.Index]
 	return fmt.Sprintf(
 		"%s **%s** (%s/%s)",
@@ -216,7 +212,7 @@ func formatCurrentSong(session *discordgo.Session, status string, server *Server
 	)
 }
 
-func formatSong(session *discordgo.Session, status string, server *Server, queueItem *QueueItem) string {
+func formatSong(status string, server *Server, queueItem *QueueItem) string {
 	return fmt.Sprintf(
 		"%s **%s** (%s)",
 		status,
@@ -234,4 +230,17 @@ func formatDuration(duration time.Duration) string {
 		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
 	}
 	return fmt.Sprintf("%d:%02d", minutes, seconds)
+}
+
+func PrintQueue(server *Server) string {
+	lines := make([]string, 0)
+	for index, queueItem := range server.Queue {
+		indexString := fmt.Sprintf("%d. ", index)
+		if index == server.Index {
+			lines = append(lines, formatCurrentSong(indexString, server))
+		} else {
+			lines = append(lines, formatSong(indexString, server, queueItem))
+		}
+	}
+	return strings.Join(lines, "\n")
 }

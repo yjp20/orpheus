@@ -3,11 +3,10 @@ package main
 import (
 	"fmt"
 	"sort"
-
-	"github.com/bwmarrin/discordgo"
+	"math/rand"
 )
 
-func (server *Server) Add(url string, userId string, session *discordgo.Session) (*QueueItem, error) {
+func (server *Server) Add(url string, userId string) (*QueueItem, error) {
 	song, err := fetchSongFromURL(url)
 	if err != nil {
 		return nil, err
@@ -16,6 +15,7 @@ func (server *Server) Add(url string, userId string, session *discordgo.Session)
 		Song:     song,
 		QueuedBy: userId,
 		Index:    max(server.getQueueSum(userId), server.currentIndex()) + int64(song.Length),
+		Dynamic: true,
 	}
 	server.Queue = append(server.Queue, queueItem)
 	server.sortQueue()
@@ -42,8 +42,12 @@ func (server *Server) Move(from, to int) (*QueueItem, error) {
 	}
 	if to+1 == len(server.Queue) {
 		target.Index = server.Queue[to].Index + int64(target.Song.Length)
-	} else {
+	} else if to == 0 {
+		target.Index = server.Queue[to].Index - int64(target.Song.Length)
+	} else if to > from {
 		target.Index = (server.Queue[to].Index + server.Queue[to+1].Index) / 2
+	} else if to < from {
+		target.Index = (server.Queue[to].Index + server.Queue[to-1].Index) / 2
 	}
 	target.Dynamic = false
 	server.sortQueue()
@@ -62,6 +66,20 @@ func (server *Server) Remove(index int) (*QueueItem, error) {
 	}
 	server.triggerUpdate()
 	return queueItem, nil
+}
+
+func (server *Server) Shuffle() {
+	if len(server.Queue) == 0 {
+		return
+	}
+	for _, item := range server.Queue {
+		item.Index = 0
+		item.Dynamic = false
+	}
+	for i := range server.Queue {
+		j := rand.Intn(i+1)
+		server.Queue[i], server.Queue[j] = server.Queue[j], server.Queue[i]
+	}
 }
 
 func (server *Server) triggerUpdate() {
