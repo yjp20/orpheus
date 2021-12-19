@@ -24,6 +24,16 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
+	{Name: "addshuf", Description: "Adds a playlist to the queue in a shuffled order",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type: discordgo.ApplicationCommandOptionString,
+				Name: "url",
+				Description: "link to music",
+				Required: true,
+			},
+		},
+	},
 	{Name: "fastforward", Description: "Goes forward a given amount of seconds",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
@@ -99,14 +109,22 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		})
-		queueItem, err := server.Add(m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID)
+		queueItem, err := server.Add(m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, false)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
 		}
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong("Added", server, queueItem),
+			Content: formatSong("Added", server, queueItem[0]),
 		})
+
+	case "addshuf":
+		queuedList, err := server.Add(m.ApplicationCommandData().Options[0].StringValue(), s.State.User.ID, true)
+		if err != nil {
+			log.Printf("failed to add song\nerror: %s\n", err)
+			return
+		}
+		response = formatSong("Added", server, queuedList[0]) + " and others"
 
 	case "queue":
 		response = PrintQueue(server)

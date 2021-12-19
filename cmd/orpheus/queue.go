@@ -6,21 +6,31 @@ import (
 	"math/rand"
 )
 
-func (server *Server) Add(url string, userId string) (*QueueItem, error) {
-	song, err := fetchSongFromURL(url)
+func (server *Server) Add(url string, userId string, shuf bool) ([]*QueueItem, error) {
+	songs, err := fetchSongFromURL(url)
 	if err != nil {
 		return nil, err
 	}
-	queueItem := &QueueItem{
-		Song:     song,
-		QueuedBy: userId,
-		Index:    max(server.getQueueSum(userId), server.currentIndex()) + int64(song.Length),
-		Dynamic: true,
+	if shuf {
+		for i := range songs {
+			j := rand.Intn(i+1)
+			songs[i], songs[j] = songs[j], songs[i]
+		}
 	}
-	server.Queue = append(server.Queue, queueItem)
-	server.sortQueue()
-	server.triggerUpdate()
-	return queueItem, err
+	queuedList := make([]*QueueItem, 0)
+	for _, song := range songs {
+		queueItem := &QueueItem{
+			Song:     song,
+			QueuedBy: userId,
+			Index:    max(server.getQueueSum(userId), server.currentIndex()) + int64(song.Length),
+			Dynamic: true,
+		}
+		server.Queue = append(server.Queue, queueItem)
+		queuedList = append(queuedList, queueItem)
+		server.sortQueue()
+		server.triggerUpdate()
+	}
+	return queuedList, err
 }
 
 func (server *Server) SkipTo(index int) (*QueueItem, error) {
