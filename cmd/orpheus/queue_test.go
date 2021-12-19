@@ -82,7 +82,8 @@ func TestAdd(t *testing.T) {
 		for index, url := range test.links {
 			fmt.Printf("YEP %s\n", test.users[index])
 			fmt.Printf("%d %d\n", server.getQueueSum(test.users[index]), server.currentIndex())
-			item, _ := server.Add(url, test.users[index], false)
+			songs, _ := fetchSongsFromURL(url, true)
+			item := server.Add(songs, test.users[index], false)
 			fmt.Printf("item number %d Index %d\n", index, item[0].Index)
 		}
 		queue := PrintQueue(server)
@@ -145,7 +146,8 @@ func TestSkipTo(t *testing.T) {
 		server.Player = Player{ Time: 0 }
 		ct := 0
 		for index, url := range test.links {
-			item, _ := server.Add(url, test.users[index], false)
+			songs, _ := fetchSongsFromURL(url, true)
+			item := server.Add(songs, test.users[index], false)
 			fmt.Printf("item number %d Index %d\n", index, item[0].Index)
 			if skipTests[i].whenIndex[ct] == index{
 				server.SkipTo(skipTests[i].toindex[ct])
@@ -202,7 +204,8 @@ func TestMove(t *testing.T){
 		server := getServer("move"+strconv.Itoa(i))
 		server.Player = Player{ Time: 0 }
 		for index, url := range test.links {
-			item, _ := server.Add(url, test.users[index], false)
+			songs, _ := fetchSongsFromURL(url, true)
+			item := server.Add(songs, test.users[index], false)
 			fmt.Printf("item number %d Index %d\n", index, item[0].Index)
 		}
 		for index, from := range MoveTests[i].fromIndex {
@@ -267,7 +270,8 @@ func TestRemove(t *testing.T) {
 		server.Player = Player{ Time: 0 }
 		ct := 0
 		for index, url := range test.links {
-			item, _ := server.Add(url, test.users[index], false)
+			songs, _ := fetchSongsFromURL(url, true)
+			item := server.Add(songs, test.users[index], false)
 			fmt.Printf("item number %d Index %d\n", index, item[0].Index)
 			if RemoveTests[i].whenIndex[ct] == index{
 				server.Remove(RemoveTests[i].rindex[ct])

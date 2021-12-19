@@ -12,16 +12,20 @@ import (
 	mp3 "github.com/hajimehoshi/go-mp3"
 )
 
-func fetchSongFromURL(url string) (songs []*Song, err error) {
-	metaDataProcess := exec.Command("yt-dlp", "--yes-playlist", "--print", "%(title)s\n%(id)s\n%(duration)d", "--no-warnings", url)
+func fetchSongsFromURL(url string, IsList bool) (songs []*Song, err error) {
+	listFlag := "--no-playlist"
+	if IsList {
+		listFlag = "--yes-playlist"
+	}
+	metaDataProcess := exec.Command("yt-dlp", listFlag, "--print", "%(title)s\n%(id)s\n%(duration)d", "--no-warnings", url)
 	metaData, err := metaDataProcess.Output()
 	if err != nil {
 		return nil, err
 	}
 	tokens := strings.Split(string(metaData), "\n")
-	numsongs := len(tokens)/3
+	numSongs := len(tokens)/3
 	songs = make([]*Song, 0)
-	for i := 0; i < numsongs; i++ {
+	for i := 0; i < numSongs; i++ {
 		song := &Song{
 			Name:         tokens[i*3],
 			ID:           tokens[i*3+1],

@@ -3,21 +3,16 @@ package main
 import (
 	"fmt"
 	"sort"
+	"time"
 	"math/rand"
 )
 
-func (server *Server) Add(url string, userId string, shuf bool) ([]*QueueItem, error) {
-	songs, err := fetchSongFromURL(url)
-	if err != nil {
-		return nil, err
+func (server *Server) Add(songs []*Song, userId string, shuffle bool) ([]*QueueItem) {
+	if shuffle {
+		rand.Seed(time.Now().UnixNano())
+		rand.Shuffle(len(songs), func(i, j int) { songs[i], songs[j] = songs[j], songs[i] })
 	}
-	if shuf {
-		for i := range songs {
-			j := rand.Intn(i+1)
-			songs[i], songs[j] = songs[j], songs[i]
-		}
-	}
-	queuedList := make([]*QueueItem, 0)
+	queueItems := make([]*QueueItem, 0)
 	for _, song := range songs {
 		queueItem := &QueueItem{
 			Song:     song,
@@ -26,11 +21,11 @@ func (server *Server) Add(url string, userId string, shuf bool) ([]*QueueItem, e
 			Dynamic: true,
 		}
 		server.Queue = append(server.Queue, queueItem)
-		queuedList = append(queuedList, queueItem)
+		queueItems = append(queueItems, queueItem)
 		server.sortQueue()
 		server.triggerUpdate()
 	}
-	return queuedList, err
+	return queueItems
 }
 
 func (server *Server) SkipTo(index int) (*QueueItem, error) {
@@ -86,10 +81,8 @@ func (server *Server) Shuffle() {
 		item.Index = 0
 		item.Dynamic = false
 	}
-	for i := range server.Queue {
-		j := rand.Intn(i+1)
-		server.Queue[i], server.Queue[j] = server.Queue[j], server.Queue[i]
-	}
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(server.Queue), func(i, j int) { server.Queue[i], server.Queue[j] = server.Queue[j], server.Queue[i] })
 }
 
 func (server *Server) triggerUpdate() {
