@@ -27,16 +27,16 @@ var commands = []*discordgo.ApplicationCommand{
 	{Name: "addlist", Description: "Adds a playlist to the queue",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
-				Type: discordgo.ApplicationCommandOptionString,
-				Name: "url",
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "url",
 				Description: "link to music",
-				Required: true,
+				Required:    true,
 			},
 			{
-				Type: discordgo.ApplicationCommandOptionBoolean,
-				Name: "shuffle",
+				Type:        discordgo.ApplicationCommandOptionBoolean,
+				Name:        "shuffle",
 				Description: "shuffle playlist before queueing",
-				Required: false,
+				Required:    false,
 			},
 		},
 	},
@@ -90,7 +90,32 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
-	{Name: "shuffle", Description: "Shuffles the queue",},
+	{Name: "loop", Description: "Change the looping policy of the queue",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "mode",
+				Description: "looping mode of the queue",
+				Required:    true,
+				Choices: []*discordgo.ApplicationCommandOptionChoice{
+					{
+						Name:  "one",
+						Value: LoopSong,
+					},
+					{
+						Name:  "all",
+						Value: LoopQueue,
+					},
+					{
+						Name:  "off",
+						Value: NoLoop,
+					},
+				},
+			},
+		},
+	},
+	{Name: "shuffle", Description: "Shuffles the queue"},
+	{Name: "nowplaying", Description: "Shows the currently playing song"},
 }
 
 func initCommands(s *discordgo.Session, guildId string) error {
@@ -208,6 +233,20 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 	case "shuffle":
 		server.Shuffle()
 		response = fmt.Sprintf("Shuffling the queue...")
+
+	case "nowplaying":
+		response = formatCurrentSong("Currently Playing: ", server)
+
+	case "loop":
+		server.NextPolicy = NextPolicy(m.ApplicationCommandData().Options[0].IntValue())
+		switch server.NextPolicy{
+		case NoLoop:
+			response = "Looping turned off"
+		case LoopSong:
+			response = "Now looping current song"
+		case LoopQueue:
+			response = "Now looping queue"
+		}
 	}
 
 	if response != "" {
