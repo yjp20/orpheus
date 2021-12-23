@@ -38,9 +38,9 @@ var tests = []struct {
 }{
 	{
 		[][]*Song{
-			{snowDrive,},
-			{osuMemories,},
-			{osuMemories2,},
+			{snowDrive},
+			{osuMemories},
+			{osuMemories2},
 		},
 		[]string{
 			"mycho",
@@ -57,10 +57,10 @@ var tests = []struct {
 	{
 		[][]*Song{
 			{mathPodcast1},
-			{mathPodcast3,},
-			{mathPodcast5,},
-			{flyMeToTheMoon,},
-			{justTheTwoOfUs,},
+			{mathPodcast3},
+			{mathPodcast5},
+			{flyMeToTheMoon},
+			{justTheTwoOfUs},
 		},
 		[]string{
 			"mycho",
@@ -80,12 +80,12 @@ var tests = []struct {
 	},
 	{
 		[][]*Song{
-			{rickRoll,},
-			{sougetsuEli,},
-			{lingus,},
-			{flintstones,},
-			{nipponEgaoHyakkei,},
-			{offlinePodcast,},
+			{rickRoll},
+			{sougetsuEli},
+			{lingus},
+			{flintstones},
+			{nipponEgaoHyakkei},
+			{offlinePodcast},
 		},
 		[]string{
 			"mycho",
@@ -114,8 +114,8 @@ var tests = []struct {
 				empireStateOfMind,
 				kekkaiSensen,
 			},
-			{rickRoll,},
-			{strange,},
+			{rickRoll},
+			{strange},
 		},
 		[]string{
 			"mycho",
@@ -136,10 +136,10 @@ var tests = []struct {
 				helloWorld,
 				marshmary,
 			},
-			{empireStateOfMind,},
-			{kekkaiSensen,},
-			{rickRoll,},
-			{flyMeToTheMoon,},
+			{empireStateOfMind},
+			{kekkaiSensen},
+			{rickRoll},
+			{flyMeToTheMoon},
 		},
 		[]string{
 			"mycho",

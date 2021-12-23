@@ -2,8 +2,8 @@ package main
 
 import (
 	"os/exec"
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,11 +23,11 @@ func fetchSongsFromURL(url string, playlist bool) (songs []*Song, err error) {
 	songs = make([]*Song, numSongs)
 	for i := 0; i < numSongs; i++ {
 		title, id, duration, _ := tokens[4*i], tokens[4*i+1], tokens[4*i+2], tokens[4*i+3]
-		seconds, _:= strconv.Atoi(duration)
+		seconds, _ := strconv.Atoi(duration)
 		songs[i] = &Song{
 			Name:   title,
 			ID:     id,
-			File:   "./data/" + id  + ".wav",
+			File:   "./data/" + id + ".wav",
 			Length: time.Duration(seconds) * time.Second,
 			Format: Wav,
 		}

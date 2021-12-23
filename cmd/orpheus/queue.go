@@ -115,12 +115,20 @@ func (server *Server) Shuffle() {
 	})
 }
 
+func (server *Server) Clear() {
+	server.Queue = make([]*QueueItem, 0)
+	server.Index = 0
+	server.triggerUpdate()
+}
+
 func (server *Server) triggerUpdate() {
 	if server.Index < len(server.Queue) {
 		queueItem := server.Queue[server.Index]
 		if queueItem.Song != server.Player.Song {
 			server.Player.PlaySong(queueItem.Song)
 		}
+	} else {
+		server.Player.killWorker()
 	}
 }
 

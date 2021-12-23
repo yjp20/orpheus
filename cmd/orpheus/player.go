@@ -136,7 +136,7 @@ func (p *Player) audioWorker(decoder *wav.Decoder) {
 	frameSize := sampleRate / 50
 	encoder, _ := gopus.NewEncoder(sampleRate, 2, gopus.Audio)
 	buffer16 := make([]int16, frameSize*2)
-	buffer := audio.IntBuffer{ Data: make([]int, frameSize*2) }
+	buffer := audio.IntBuffer{Data: make([]int, frameSize*2)}
 
 	for p.Voice == nil {
 		<-events

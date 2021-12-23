@@ -201,6 +201,7 @@ var commands = []*discordgo.ApplicationCommand{
 	},
 	{Name: "shuffle", Description: "Shuffles the queue"},
 	{Name: "nowplaying", Description: "Shows the currently playing song"},
+	{Name: "clear", Description: "Removes all songs from the queue and stops playing"},
 	{Name: "help", Description: "Prints all available commands"},
 }
 
@@ -259,6 +260,10 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		})
 
 	case "queue":
+		if len(server.Queue) == 0 {
+			response = "Queue is empty\n"
+			break
+		}
 		response = PrintQueue(server)
 
 	case "pause":
@@ -297,7 +302,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		index := int(m.ApplicationCommandData().Options[0].IntValue())
 		if index >= len(server.Queue) || index < 0 {
 			response = "index out of range"
-			return
+			break
 		}
 		server.SkipTo(index)
 		response = formatCurrentSong("Skip to", server)
@@ -307,8 +312,11 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		if len(m.ApplicationCommandData().Options) >= 1 {
 			index = int(m.ApplicationCommandData().Options[0].IntValue())
 		}
-		server.Remove(index)
-		response = formatCurrentSong("Remove", server)
+		queueItem, err := server.Remove(index)
+		if err != nil {
+			log.Printf("Failed to remove song\nerror: %s\n", err)
+		}
+		response = formatSong("Remove", server, queueItem)
 
 	case "join":
 		guild, err := s.State.Guild(m.GuildID)
@@ -364,7 +372,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		}
 		song, err := fetchSongsFromURL(string(metaData), false)
 		if err != nil {
-			log.Printf("failed to add song to queue\n")
+			log.Printf("failed to fetch song\nerror: %s\n", err)
 			return
 		}
 		policy := Smart
@@ -386,7 +394,12 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	case "move":
 		server.Move(int(m.ApplicationCommandData().Options[0].IntValue()), int(m.ApplicationCommandData().Options[1].IntValue()))
-		response = fmt.Sprintf("Move **%s** from index %d to index %d\n", server.Queue[m.ApplicationCommandData().Options[1].IntValue()].Song.Name, m.ApplicationCommandData().Options[0].IntValue(), m.ApplicationCommandData().Options[1].IntValue())
+		response = fmt.Sprintf("Move **%s** from index %d to index %d\n", server.Queue[m.ApplicationCommandData().Options[1].IntValue()].Song.Name,
+			m.ApplicationCommandData().Options[0].IntValue(), m.ApplicationCommandData().Options[1].IntValue())
+
+	case "clear":
+		server.Clear()
+		response = "Queue has been cleared\n"
 	}
 
 	if response != "" {
