@@ -111,10 +111,6 @@ func (p *Player) startWorker() error {
 		return fmt.Errorf("player must have song initialized")
 	}
 
-	for !p.Song.IsDownloaded {
-		<-p.Song.download
-	}
-
 	file, err := os.Open(p.Song.File)
 	if err != nil {
 		return err

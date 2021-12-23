@@ -24,25 +24,25 @@ var commands = []*discordgo.ApplicationCommand{
 				Required:    true,
 			},
 			{
-				Type: discordgo.ApplicationCommandOptionInteger,
-				Name: "when",
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "when",
 				Description: "when to play queued song",
-				Required: false,
+				Required:    false,
 				Choices: []*discordgo.ApplicationCommandOptionChoice{
 					{
-						Name: "now",
+						Name:  "now",
 						Value: Now,
 					},
 					{
-						Name: "next",
+						Name:  "next",
 						Value: Next,
 					},
 					{
-						Name: "last",
+						Name:  "last",
 						Value: Last,
 					},
 					{
-						Name: "normal",
+						Name:  "normal",
 						Value: Smart,
 					},
 				},
@@ -74,25 +74,25 @@ var commands = []*discordgo.ApplicationCommand{
 				Required:    true,
 			},
 			{
-				Type: discordgo.ApplicationCommandOptionInteger,
-				Name: "when",
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "when",
 				Description: "when to play queued song",
-				Required: false,
+				Required:    false,
 				Choices: []*discordgo.ApplicationCommandOptionChoice{
 					{
-						Name: "now",
+						Name:  "now",
 						Value: Now,
 					},
 					{
-						Name: "next",
+						Name:  "next",
 						Value: Next,
 					},
 					{
-						Name: "last",
+						Name:  "last",
 						Value: Last,
 					},
 					{
-						Name: "normal",
+						Name:  "normal",
 						Value: Smart,
 					},
 				},
@@ -129,13 +129,23 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
-	{Name: "skip", Description: "Skips a song in the queue",
+	{Name: "skip", Description: "Skips a song (or multiple songs) in the queue",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:        discordgo.ApplicationCommandOptionInteger,
 				Name:        "index",
-				Description: "index to skip to",
+				Description: "number of indices to skip",
 				Required:    false,
+			},
+		},
+	},
+	{Name: "goto", Description: "Plays the song at a given index",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "index",
+				Description: "index of song to play",
+				Required:    true,
 			},
 		},
 	},
@@ -152,16 +162,16 @@ var commands = []*discordgo.ApplicationCommand{
 	{Name: "move", Description: "Moves a song in the queue to a desired position",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
-				Type: discordgo.ApplicationCommandOptionInteger,
-				Name: "from",
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "from",
 				Description: "index of song to move",
-				Required: true,
+				Required:    true,
 			},
 			{
-				Type: discordgo.ApplicationCommandOptionInteger,
-				Name: "to",
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "to",
 				Description: "new index of song",
-				Required: true,
+				Required:    true,
 			},
 		},
 	},
@@ -245,7 +255,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		}
 		queueItems := server.Add(songs, s.State.User.ID, shuffle, Smart)
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong("Add", server, queueItems[0]) + " and others",
+			Content: formatSong("Add", server, queueItems[0]) + fmt.Sprintf(" and %d others", len(queueItems)-1),
 		})
 
 	case "queue":
@@ -280,6 +290,15 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			skip = int(m.ApplicationCommandData().Options[0].IntValue())
 		}
 		index := (server.Index + skip) % len(server.Queue)
+		server.SkipTo(index)
+		response = formatCurrentSong("Skip to", server)
+
+	case "goto":
+		index := int(m.ApplicationCommandData().Options[0].IntValue())
+		if index >= len(server.Queue) || index < 0 {
+			response = "index out of range"
+			return
+		}
 		server.SkipTo(index)
 		response = formatCurrentSong("Skip to", server)
 
