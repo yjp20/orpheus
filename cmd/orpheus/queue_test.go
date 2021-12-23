@@ -7,6 +7,29 @@ import (
 	"time"
 )
 
+var (
+	snowDrive = &Song{ Name: "Araki-Snow Drive", Length: duration("4m26s"), }
+	osuMemories = &Song{ Name: "osu!memories", Length: duration("7m54s"), }
+    osuMemories2 = &Song{ Name: "SakiZ - osu!memories 2", Length: duration("7m44s"), }
+	mathPodcast1 = &Song{ Name: "Alex Kontorovich: Improving math | 3b1b podcast #1", Length: duration("1h24m22s"), }
+	mathPodcast3 = &Song{ Name: "Steven Strogatz: In and out of love with math | 3b1b podcast #3", Length: duration("1h54m7s"), }
+	mathPodcast5 = &Song{ Name: "Tai-Danae Bradley: Where math meets language | 3b1b Podcast #5", Length: duration("1h36m5s"), }
+	flyMeToTheMoon = &Song{ Name: "Fly Me To The Moon (2008 Remastered)", Length: duration("2m27s"), }
+	justTheTwoOfUs = &Song{ Name: "Grover Washington Jr. feat. Bill Withers - Just The Two of Us [HQ]", Length: duration("3m56s"), }
+	rickRoll = &Song{ Name: "Rick Astley - Never Gonna Give You Up (Official Music Video)", Length: duration("3m32s"), }
+	sougetsuEli = &Song{ Name: "Aoi Chou - Sougetsu Eli", Length: duration("3m35s"), }
+	lingus = &Song{ Name: "Snarky Puppy - Lingus (We Like It Here)", Length: duration("10m43s"), }
+	flintstones = &Song{ Name: "Flintstones - Jacob Collier", Length: duration("3m10s"), }
+	nipponEgaoHyakkei = &Song{ Name: "Nippon Egao Hyakkei", Length: duration("3m57s"), }
+	offlinePodcast = &Song{ Name: "JAE ON TWITCH ft. eaJ - OfflineTV Podcast #8", Length: duration("1h7m28s"), }
+	catchMeIfYouCan = &Song{ Name: "Catch Me If You Can", Length: duration("3m26s"), }
+	helloWorld = &Song{ Name: "BUMP OF CHICKEN「Hello,world!」", Length: duration("4m22s"), }
+	marshmary = &Song{ Name: "マシュマリー / feat.初音ミク", Length: duration("3m32s"), }
+	empireStateOfMind = &Song{ Name: "Empire State Of Mind", Length: duration("4m36s"), }
+	kekkaiSensen = &Song{ Name: "blood blockade battlefront ED 1 full", Length: duration("4m8s"), }
+	strange = &Song{ Name: "Celeste - Strange (Official Video)", Length: duration("3m30s"), }
+)
+
 var tests = []struct {
 	songs [][]*Song
 	users []string
@@ -16,22 +39,13 @@ var tests = []struct {
 	{
 		[][]*Song {
 			[]*Song{
-				&Song{
-					Name: "Araki-Snow Drive",
-					Length: first("4m26s"),
-				},
+				snowDrive,
 			},
 			[]*Song{
-				&Song{
-					Name: "osu!memories",
-					Length: first("7m54s"),
-				},
+				osuMemories,
 			},
 			[]*Song{
-				&Song{
-					Name: "SakiZ - osu!memories 2",
-					Length: first("7m44s"),
-				},
+				osuMemories2,
 			},
 		},
 		[]string{
@@ -49,34 +63,19 @@ var tests = []struct {
 	{
 		[][]*Song{
 			[]*Song{
-				&Song{
-					Name: "Alex Kontorovich: Improving math | 3b1b podcast #1",
-					Length: first("1h24m22s"),
-				},
+				mathPodcast1,
 			},
 			[]*Song{
-				&Song{
-					Name: "Steven Strogatz: In and out of love with math | 3b1b podcast #3",
-					Length: first("1h54m7s"),
-				},
+				mathPodcast3,
 			},
 			[]*Song{
-				&Song{
-					Name: "Tai-Danae Bradley: Where math meets language | 3b1b Podcast #5",
-					Length: first("1h36m5s"),
-				},
+				mathPodcast5,
 			},
 			[]*Song{
-				&Song{
-					Name: "Fly Me To The Moon (2008 Remastered)",
-					Length: first("2m27s"),
-				},
+				flyMeToTheMoon,
 			},
 			[]*Song{
-				&Song{
-					Name: "Grover Washington Jr. feat. Bill Withers - Just The Two of Us [HQ]",
-					Length: first("3m56s"),
-				},
+				justTheTwoOfUs,
 			},
 		},
 		[]string{
@@ -98,40 +97,22 @@ var tests = []struct {
 	{
 		[][]*Song{
 			[]*Song{
-				&Song{
-					Name: "Rick Astley - Never Gonna Give You Up (Official Music Video)",
-					Length: first("3m32s"),
-				},
+				rickRoll,
 			},
 			[]*Song{
-				&Song{
-					Name: "Aoi Chou - Sougetsu Eli",
-					Length: first("3m35s"),
-				},
+				sougetsuEli,
 			},
 			[]*Song{
-				&Song{
-					Name: "Snarky Puppy - Lingus (We Like It Here)",
-					Length: first("10m43s"),
-				},
+				lingus,
 			},
 			[]*Song{
-				&Song{
-					Name: "Flintstones - Jacob Collier",
-					Length: first("3m10s"),
-				},
+				flintstones,
 			},
 			[]*Song{
-				&Song{
-					Name: "Nippon Egao Hyakkei",
-					Length: first("3m57s"),
-				},
+				nipponEgaoHyakkei,
 			},
 			[]*Song{
-				&Song{
-					Name: "JAE ON TWITCH ft. eaJ - OfflineTV Podcast #8",
-					Length: first("1h7m28s"),
-				},
+				offlinePodcast,
 			},
 		},
 		[]string{
@@ -155,38 +136,17 @@ var tests = []struct {
 	{
 		[][]*Song{
 			[]*Song{
-				&Song{
-					Name: "Catch Me If You Can",
-					Length: first("3m26s"),
-				},
-				&Song{
-					Name: "BUMP OF CHICKEN「Hello,world!」",
-					Length: first("4m22s"),
-				},
-				&Song{
-					Name: "マシュマリー / feat.初音ミク",
-					Length: first("3m32s"),
-				},
-				&Song{
-					Name: "Empire State Of Mind",
-					Length: first("4m36s"),
-				},
-				&Song{
-					Name: "blood blockade battlefront ED 1 full",
-					Length: first("4m8s"),
-				},
+				catchMeIfYouCan,
+				helloWorld,
+				marshmary,
+				empireStateOfMind,
+				kekkaiSensen,
 			},
 			[]*Song{
-				&Song{
-					Name: "Rick Astley - Never Gonna Give You Up (Official Music Video)",
-					Length: first("3m32s"),
-				},
+				rickRoll,
 			},
 			[]*Song{
-				&Song{
-					Name: "Celeste - Strange (Official Video)",
-					Length: first("3m30s"),
-				},
+				strange,
 			},
 		},
 		[]string{
@@ -204,42 +164,21 @@ var tests = []struct {
 	{
 		[][]*Song{
 			[]*Song{
-				&Song{
-					Name: "Catch Me If You Can",
-					Length: first("3m26s"),
-				},
-				&Song{
-					Name: "BUMP OF CHICKEN「Hello,world!」",
-					Length: first("4m22s"),
-				},
-				&Song{
-					Name: "マシュマリー / feat.初音ミク",
-					Length: first("3m32s"),
-				},
+				catchMeIfYouCan,
+				helloWorld,
+				marshmary,
 			},
 			[]*Song{
-				&Song{
-					Name: "Empire State of Mind",
-					Length: first("4m36s"),
-				},
+				empireStateOfMind,
 			},
 			[]*Song{
-				&Song{
-					Name: "blood blockade battlefront ED 1 full",
-					Length: first("4m8s"),
-				},
+				kekkaiSensen,
 			},
 			[]*Song{
-				&Song{
-					Name: "Rick Astley - Never Gonna Give You Up (Official Music Video)",
-					Length: first("3m32s"),
-				},
+				rickRoll,
 			},
 			[]*Song{
-				&Song{
-					Name: "Fly Me To The Moon (2008 Remastered)",
-					Length: first("2m27s"),
-				},
+				flyMeToTheMoon,
 			},
 		},
 		[]string{
@@ -256,7 +195,7 @@ var tests = []struct {
 			Now,
 			Last,
 		},
-		"0.  **Catch Me If You Can** (3:26)\n1.  **Rick Astley - Never Gonna Give You Up (Official Music Video)** (0:00/3:32)\n2.  **blood blockade battlefront ED 1 full** (4:08)\n3.  **BUMP OF CHICKEN「Hello,world!」** (4:22)\n4.  **Empire State of Mind** (4:36)\n5.  **マシュマリー / feat.初音ミク** (3:32)\n6.  **Fly Me To The Moon (2008 Remastered)** (2:27)",
+		"0.  **Catch Me If You Can** (3:26)\n1.  **Rick Astley - Never Gonna Give You Up (Official Music Video)** (0:00/3:32)\n2.  **blood blockade battlefront ED 1 full** (4:08)\n3.  **BUMP OF CHICKEN「Hello,world!」** (4:22)\n4.  **Empire State Of Mind** (4:36)\n5.  **マシュマリー / feat.初音ミク** (3:32)\n6.  **Fly Me To The Moon (2008 Remastered)** (2:27)",
 	},
 }
 
@@ -481,7 +420,7 @@ func TestRemove(t *testing.T) {
 	}
 }
 
-func first(s string) time.Duration {
+func duration(s string) time.Duration {
 	temp, _ := time.ParseDuration(s)
 	return temp
 }
