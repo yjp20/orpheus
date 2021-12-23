@@ -227,10 +227,13 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		}
 		queueItem := server.Add(song, s.State.User.ID, false, policy)
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong("Added ", server, queueItem[0]),
+			Content: formatSong("Add", server, queueItem[0]),
 		})
 
 	case "addlist":
+		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		})
 		songs, err := fetchSongsFromURL(m.ApplicationCommandData().Options[0].StringValue(), true)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
@@ -241,7 +244,9 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			shuffle = m.ApplicationCommandData().Options[1].BoolValue()
 		}
 		queueItems := server.Add(songs, s.State.User.ID, shuffle, Smart)
-		response = formatSong("Added ", server, queueItems[0]) + " and others"
+		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
+			Content: formatSong("Add", server, queueItems[0]) + " and others",
+		})
 
 	case "queue":
 		response = PrintQueue(server)
@@ -252,7 +257,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	case "resume":
 		server.Player.Resume()
-		response = formatCurrentSong("Resume", server)
+		response = formatCurrentSong("Resumed", server)
 
 	case "fastforward":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
@@ -276,7 +281,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		}
 		index := (server.Index + skip) % len(server.Queue)
 		server.SkipTo(index)
-		response = formatCurrentSong("Rewind", server)
+		response = formatCurrentSong("Skip to", server)
 
 	case "remove":
 		index := server.Index
@@ -284,7 +289,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			index = int(m.ApplicationCommandData().Options[0].IntValue())
 		}
 		server.Remove(index)
-		response = formatCurrentSong("Rewind", server)
+		response = formatCurrentSong("Remove", server)
 
 	case "join":
 		guild, err := s.State.Guild(m.GuildID)
@@ -329,6 +334,9 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		}
 
 	case "search":
+		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		})
 		metaDataProcess := exec.Command("yt-dlp", "--default-search", "auto", "--print", "%(id)s", m.ApplicationCommandData().Options[0].StringValue())
 		metaData, err := metaDataProcess.Output()
 		if err != nil || string(metaData) == "" {
@@ -345,7 +353,9 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			policy = addPolicy(m.ApplicationCommandData().Options[1].IntValue())
 		}
 		queueItem := server.Add(song, s.State.User.ID, false, policy)
-		response = formatSong("Added ", server, queueItem[0])
+		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
+			Content: formatSong("Add", server, queueItem[0]),
+		})
 
 	case "help":
 		lines := make([]string, 0)
@@ -357,7 +367,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	case "move":
 		server.Move(int(m.ApplicationCommandData().Options[0].IntValue()), int(m.ApplicationCommandData().Options[1].IntValue()))
-		response = fmt.Sprintf("Moved **%s** from index %d to index %d\n", server.Queue[m.ApplicationCommandData().Options[1].IntValue()].Song.Name, m.ApplicationCommandData().Options[0].IntValue(), m.ApplicationCommandData().Options[1].IntValue())
+		response = fmt.Sprintf("Move **%s** from index %d to index %d\n", server.Queue[m.ApplicationCommandData().Options[1].IntValue()].Song.Name, m.ApplicationCommandData().Options[0].IntValue(), m.ApplicationCommandData().Options[1].IntValue())
 	}
 
 	if response != "" {
