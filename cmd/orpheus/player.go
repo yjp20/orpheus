@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	BYTES_IN_FRAME = int64(4)
+	BYTES_IN_FRAME = int64(2)
 )
 
 type Player struct {
@@ -177,7 +177,7 @@ playing:
 			if err != nil {
 				goto cleanup
 			}
-			p.Time += time.Duration(int64(time.Second) / int64(48000) * int64(len(buffer16)) / BYTES_IN_FRAME)
+			p.Time += time.Duration(int64(time.Second) / 48000 * int64(len(buffer16)) / BYTES_IN_FRAME)
 			p.Voice.OpusSend <- res
 		}
 	}
