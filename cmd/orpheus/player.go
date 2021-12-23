@@ -203,9 +203,6 @@ paused:
 
 cleanup:
 	p.Voice.Speaking(false)
-	p.mu.Lock()
-	p.events = nil
-	p.mu.Unlock()
 	close(events)
 	if p.Callback != nil {
 		go p.Callback(killed)
