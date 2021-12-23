@@ -128,7 +128,7 @@ func (server *Server) nextSong(killed bool) {
 			server.Index = (server.Index + 1) % len(server.Queue)
 			server.triggerUpdate()
 		case LoopSong:
-			server.Player.Seek(0)
+			server.Player.PlaySong(server.Queue[server.Index].Song)
 		}
 	}
 }
