@@ -20,14 +20,12 @@ type QueueItem struct {
 }
 
 type Song struct {
-	ID           string        `json:"id"`
-	Name         string        `json:"name"`
-	URL          string        `json:"url"`
-	Length       time.Duration `json:"length"`
-	File         string        `json:"file"`
-	IsDownloaded bool          `json:"is_downloaded"`
-
-	download chan int
+	ID     string        `json:"id"`
+	Name   string        `json:"name"`
+	URL    string        `json:"url"`
+	Length time.Duration `json:"length"`
+	File   string        `json:"file"`
+	Format Format        `json:"format"`
 }
 
 type NextPolicy int
@@ -36,6 +34,18 @@ const (
 	LoopSong NextPolicy = iota
 	LoopQueue
 	NoLoop
+)
+
+type Format int
+
+const (
+	Opus Format = iota
+	Mp3
+	M4a
+	Wav
+	Aac
+	Vorbis
+	Flac
 )
 
 var servers = make(map[string]*Server)

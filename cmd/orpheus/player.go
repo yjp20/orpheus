@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -10,12 +9,13 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	mp3 "github.com/hajimehoshi/go-mp3"
+	"github.com/go-audio/audio"
+	"github.com/go-audio/wav"
 	"layeh.com/gopus"
 )
 
 const (
-	BYTES_IN_FRAME = int64(4)
+	BYTES_IN_FRAME = int64(2)
 )
 
 type Player struct {
@@ -90,8 +90,8 @@ func (p *Player) Seek(seconds float64) {
 	p.mu.Unlock()
 }
 
-func (p *Player) seek(decoder *mp3.Decoder) error {
-	offset := BYTES_IN_FRAME * (int64(p.Time) / (int64(time.Second) / int64(decoder.SampleRate())))
+func (p *Player) seek(decoder io.Seeker) error {
+	offset := BYTES_IN_FRAME * (int64(p.Time) / (int64(time.Second) / int64(48000)))
 	_, err := decoder.Seek(offset, io.SeekStart)
 	return err
 }
@@ -115,10 +115,7 @@ func (p *Player) startWorker() error {
 	if err != nil {
 		return err
 	}
-	decoder, err := mp3.NewDecoder(file)
-	if err != nil {
-		return err
-	}
+	decoder := wav.NewDecoder(file)
 	err = p.seek(decoder)
 	if err != nil {
 		return err
@@ -128,16 +125,18 @@ func (p *Player) startWorker() error {
 	return nil
 }
 
-func (p *Player) audioWorker(decoder *mp3.Decoder) {
+func (p *Player) audioWorker(decoder *wav.Decoder) {
 	killed := false
 	events := make(chan playerEvent)
 	p.mu.Lock()
 	p.events = events
 	p.mu.Unlock()
-	sampleRate := decoder.SampleRate()
+
+	sampleRate := 48000
 	frameSize := sampleRate / 50
 	encoder, _ := gopus.NewEncoder(sampleRate, 2, gopus.Audio)
 	buffer16 := make([]int16, frameSize*2)
+	buffer := audio.IntBuffer{ Data: make([]int, frameSize*2) }
 
 	for p.Voice == nil {
 		<-events
@@ -167,15 +166,18 @@ playing:
 			}
 
 		default:
-			err := binary.Read(decoder, binary.LittleEndian, &buffer16)
+			_, err := decoder.PCMBuffer(&buffer)
 			if err != nil {
 				goto cleanup
+			}
+			for i, v := range buffer.Data {
+				buffer16[i] = int16(v)
 			}
 			res, err := encoder.Encode(buffer16, frameSize, frameSize*4)
 			if err != nil {
 				goto cleanup
 			}
-			p.Time += time.Duration(int64(time.Second) / int64(decoder.SampleRate()) * int64(len(buffer16)) / BYTES_IN_FRAME)
+			p.Time += time.Duration(int64(time.Second) / 48000 * int64(len(buffer16)) / BYTES_IN_FRAME)
 			p.Voice.OpusSend <- res
 		}
 	}
