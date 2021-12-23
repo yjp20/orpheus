@@ -12,9 +12,9 @@ import (
 	mp3 "github.com/hajimehoshi/go-mp3"
 )
 
-func fetchSongsFromURL(url string, IsList bool) (songs []*Song, err error) {
+func fetchSongsFromURL(url string, playlist bool) (songs []*Song, err error) {
 	listFlag := "--no-playlist"
-	if IsList {
+	if playlist {
 		listFlag = "--yes-playlist"
 	}
 	metaDataProcess := exec.Command("yt-dlp", listFlag, "--print", "%(title)s\n%(id)s\n%(duration)d", "--no-warnings", url)
@@ -23,7 +23,7 @@ func fetchSongsFromURL(url string, IsList bool) (songs []*Song, err error) {
 		return nil, err
 	}
 	tokens := strings.Split(string(metaData), "\n")
-	numSongs := len(tokens)/3
+	numSongs := len(tokens) / 3
 	songs = make([]*Song, 0)
 	for i := 0; i < numSongs; i++ {
 		song := &Song{

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -22,6 +23,30 @@ var commands = []*discordgo.ApplicationCommand{
 				Description: "link to music",
 				Required:    true,
 			},
+			{
+				Type: discordgo.ApplicationCommandOptionInteger,
+				Name: "when",
+				Description: "when to play queued song",
+				Required: false,
+				Choices: []*discordgo.ApplicationCommandOptionChoice{
+					{
+						Name: "now",
+						Value: Now,
+					},
+					{
+						Name: "next",
+						Value: Next,
+					},
+					{
+						Name: "last",
+						Value: Last,
+					},
+					{
+						Name: "normal",
+						Value: Smart,
+					},
+				},
+			},
 		},
 	},
 	{Name: "addlist", Description: "Adds a playlist to the queue",
@@ -37,6 +62,40 @@ var commands = []*discordgo.ApplicationCommand{
 				Name:        "shuffle",
 				Description: "shuffle playlist before queueing",
 				Required:    false,
+			},
+		},
+	},
+	{Name: "search", Description: "Searches Youtube for a song and queues the first result",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "song",
+				Description: "name of song",
+				Required:    true,
+			},
+			{
+				Type: discordgo.ApplicationCommandOptionInteger,
+				Name: "when",
+				Description: "when to play queued song",
+				Required: false,
+				Choices: []*discordgo.ApplicationCommandOptionChoice{
+					{
+						Name: "now",
+						Value: Now,
+					},
+					{
+						Name: "next",
+						Value: Next,
+					},
+					{
+						Name: "last",
+						Value: Last,
+					},
+					{
+						Name: "normal",
+						Value: Smart,
+					},
+				},
 			},
 		},
 	},
@@ -90,6 +149,22 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
+	{Name: "move", Description: "Moves a song in the queue to a desired position",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type: discordgo.ApplicationCommandOptionInteger,
+				Name: "from",
+				Description: "index of song to move",
+				Required: true,
+			},
+			{
+				Type: discordgo.ApplicationCommandOptionInteger,
+				Name: "to",
+				Description: "new index of song",
+				Required: true,
+			},
+		},
+	},
 	{Name: "loop", Description: "Change the looping policy of the queue",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
@@ -116,6 +191,7 @@ var commands = []*discordgo.ApplicationCommand{
 	},
 	{Name: "shuffle", Description: "Shuffles the queue"},
 	{Name: "nowplaying", Description: "Shows the currently playing song"},
+	{Name: "help", Description: "Prints all available commands"},
 }
 
 func initCommands(s *discordgo.Session, guildId string) error {
@@ -145,9 +221,13 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
 		}
-		queueItem := server.Add(song, s.State.User.ID, false)
+		policy := Smart
+		if len(m.ApplicationCommandData().Options) > 1 {
+			policy = addPolicy(m.ApplicationCommandData().Options[1].IntValue())
+		}
+		queueItem := server.Add(song, s.State.User.ID, false, policy)
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong("Added", server, queueItem[0]),
+			Content: formatSong("Added ", server, queueItem[0]),
 		})
 
 	case "addlist":
@@ -160,8 +240,8 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		if len(m.ApplicationCommandData().Options) > 1 {
 			shuffle = m.ApplicationCommandData().Options[1].BoolValue()
 		}
-		queueItems := server.Add(songs, s.State.User.ID, shuffle)
-		response = formatSong("Added", server, queueItems[0]) + " and others"
+		queueItems := server.Add(songs, s.State.User.ID, shuffle, Smart)
+		response = formatSong("Added ", server, queueItems[0]) + " and others"
 
 	case "queue":
 		response = PrintQueue(server)
@@ -239,7 +319,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	case "loop":
 		server.NextPolicy = NextPolicy(m.ApplicationCommandData().Options[0].IntValue())
-		switch server.NextPolicy{
+		switch server.NextPolicy {
 		case NoLoop:
 			response = "Looping turned off"
 		case LoopSong:
@@ -247,6 +327,37 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		case LoopQueue:
 			response = "Now looping queue"
 		}
+
+	case "search":
+		metaDataProcess := exec.Command("yt-dlp", "--default-search", "auto", "--print", "%(id)s", m.ApplicationCommandData().Options[0].StringValue())
+		metaData, err := metaDataProcess.Output()
+		if err != nil || string(metaData) == "" {
+			log.Printf("failed to load search result matching \"%s\"\n", m.ApplicationCommandData().Options[0].StringValue())
+			return
+		}
+		song, err := fetchSongsFromURL(string(metaData), false)
+		if err != nil {
+			log.Printf("failed to add song to queue\n")
+			return
+		}
+		policy := Smart
+		if len(m.ApplicationCommandData().Options) > 1 {
+			policy = addPolicy(m.ApplicationCommandData().Options[1].IntValue())
+		}
+		queueItem := server.Add(song, s.State.User.ID, false, policy)
+		response = formatSong("Added ", server, queueItem[0])
+
+	case "help":
+		lines := make([]string, 0)
+		lines = append(lines, "Command - Description")
+		for _, command := range commands {
+			lines = append(lines, fmt.Sprintf("%s - %s", command.Name, command.Description))
+		}
+		response = strings.Join(lines, "\n")
+
+	case "move":
+		server.Move(int(m.ApplicationCommandData().Options[0].IntValue()), int(m.ApplicationCommandData().Options[1].IntValue()))
+		response = fmt.Sprintf("Moved **%s** from index %d to index %d\n", server.Queue[m.ApplicationCommandData().Options[1].IntValue()].Song.Name, m.ApplicationCommandData().Options[0].IntValue(), m.ApplicationCommandData().Options[1].IntValue())
 	}
 
 	if response != "" {

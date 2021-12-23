@@ -151,7 +151,7 @@ func (app *App) addQueue(w http.ResponseWriter, r *http.Request, ps httprouter.P
 
 	server := getServer(input.GuildID)
 	songs, _ := fetchSongsFromURL(input.Url, false)
-	song := server.Add(songs, input.UserId, false)
+	song := server.Add(songs, input.UserId, false, Smart)
 	app.writeJSON(w, 200, &(song[0]))
 }
 
