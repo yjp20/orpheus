@@ -56,9 +56,8 @@ func (p *Player) PlaySong(song *Song) error {
 
 func (p *Player) Resume() {
 	p.mu.Lock()
+	p.Playing = true
 	if p.events != nil {
-		p.Playing = true
-		p.mu.Unlock()
 		p.events <- resume
 	}
 	p.mu.Unlock()
@@ -66,9 +65,8 @@ func (p *Player) Resume() {
 
 func (p *Player) Pause() {
 	p.mu.Lock()
+	p.Playing = false
 	if p.events != nil {
-		p.Playing = false
-		p.mu.Unlock()
 		p.events <- pause
 	}
 	p.mu.Unlock()
@@ -78,7 +76,6 @@ func (p *Player) FastForward(seconds float64) {
 	p.mu.Lock()
 	p.Time = p.clampTime(p.Time + time.Duration(float64(time.Second)*seconds))
 	if p.events != nil {
-		p.mu.Unlock()
 		p.events <- seek
 	}
 	p.mu.Unlock()
@@ -86,8 +83,8 @@ func (p *Player) FastForward(seconds float64) {
 
 func (p *Player) Seek(seconds float64) {
 	p.mu.Lock()
-	p.Time = p.clampTime(time.Duration(float64(time.Second) * seconds))
 	if p.events != nil {
+		p.Time = p.clampTime(time.Duration(float64(time.Second) * seconds))
 		p.events <- seek
 	}
 	p.mu.Unlock()
@@ -113,11 +110,8 @@ func (p *Player) startWorker() error {
 	if p.Song == nil {
 		return fmt.Errorf("player must have song initialized")
 	}
-	if p.Voice == nil {
-		return fmt.Errorf("player must have voice channel initialized")
-	}
 
-	if !p.Song.IsDownloaded {
+	for !p.Song.IsDownloaded {
 		<-p.Song.download
 	}
 
@@ -148,6 +142,10 @@ func (p *Player) audioWorker(decoder *mp3.Decoder) {
 	frameSize := sampleRate / 50
 	encoder, _ := gopus.NewEncoder(sampleRate, 2, gopus.Audio)
 	buffer16 := make([]int16, frameSize*2)
+
+	for p.Voice == nil {
+		<-events
+	}
 
 	if p.Playing {
 		goto playing
@@ -207,10 +205,13 @@ paused:
 
 cleanup:
 	p.Voice.Speaking(false)
+	p.mu.Lock()
+	p.events = nil
+	p.mu.Unlock()
+	close(events)
 	if p.Callback != nil {
 		go p.Callback(killed)
 	}
-	close(events)
 }
 
 func (p *Player) clampTime(t time.Duration) time.Duration {
