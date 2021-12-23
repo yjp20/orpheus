@@ -2,25 +2,57 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"math/rand"
+	"sort"
+	"time"
 )
 
-func (server *Server) Add(url string, userId string) (*QueueItem, error) {
-	song, err := fetchSongFromURL(url)
-	if err != nil {
-		return nil, err
+type addPolicy int
+
+const (
+	Next addPolicy = iota
+	Now
+	Last
+	Smart
+)
+
+func (server *Server) Add(songs []*Song, userId string, shuffle bool, policy addPolicy) []*QueueItem {
+	if shuffle {
+		rand.Seed(time.Now().UnixNano())
+		rand.Shuffle(len(songs), func(i, j int) { songs[i], songs[j] = songs[j], songs[i] })
 	}
-	queueItem := &QueueItem{
-		Song:     song,
-		QueuedBy: userId,
-		Index:    max(server.getQueueSum(userId), server.currentIndex()) + int64(song.Length),
-		Dynamic: true,
+	queueItems := make([]*QueueItem, 0)
+	for _, song := range songs {
+		queueItem := &QueueItem{
+			Song:     song,
+			QueuedBy: userId,
+			Dynamic:  true,
+		}
+		switch policy {
+		case Next, Now:
+			if len(server.Queue) == 0 || server.Index == len(server.Queue)-1 {
+				queueItem.Rank = server.currentRank() + int64(song.Length)
+			} else {
+				queueItem.Rank = (server.Queue[server.Index].Rank + server.Queue[server.Index+1].Rank) / 2
+			}
+		case Last:
+			if len(server.Queue) == 0 {
+				queueItem.Rank = int64(song.Length)
+			} else {
+				queueItem.Rank = server.Queue[len(server.Queue)-1].Rank + int64(song.Length)
+			}
+		case Smart:
+			queueItem.Rank = max(server.getQueueSum(userId), server.currentRank()) + int64(song.Length)
+		}
+		server.Queue = append(server.Queue, queueItem)
+		queueItems = append(queueItems, queueItem)
+		server.sortQueue()
+		server.triggerUpdate()
 	}
-	server.Queue = append(server.Queue, queueItem)
-	server.sortQueue()
-	server.triggerUpdate()
-	return queueItem, err
+	if policy == Now {
+		server.nextSong(false)
+	}
+	return queueItems
 }
 
 func (server *Server) SkipTo(index int) (*QueueItem, error) {
@@ -41,13 +73,13 @@ func (server *Server) Move(from, to int) (*QueueItem, error) {
 		return target, nil
 	}
 	if to+1 == len(server.Queue) {
-		target.Index = server.Queue[to].Index + int64(target.Song.Length)
+		target.Rank = server.Queue[to].Rank + int64(target.Song.Length)
 	} else if to == 0 {
-		target.Index = server.Queue[to].Index - int64(target.Song.Length)
+		target.Rank = server.Queue[to].Rank - int64(target.Song.Length)
 	} else if to > from {
-		target.Index = (server.Queue[to].Index + server.Queue[to+1].Index) / 2
+		target.Rank = (server.Queue[to].Rank + server.Queue[to+1].Rank) / 2
 	} else if to < from {
-		target.Index = (server.Queue[to].Index + server.Queue[to-1].Index) / 2
+		target.Rank = (server.Queue[to].Rank + server.Queue[to-1].Rank) / 2
 	}
 	target.Dynamic = false
 	server.sortQueue()
@@ -73,13 +105,11 @@ func (server *Server) Shuffle() {
 		return
 	}
 	for _, item := range server.Queue {
-		item.Index = 0
+		item.Rank = 0
 		item.Dynamic = false
 	}
-	for i := range server.Queue {
-		j := rand.Intn(i+1)
-		server.Queue[i], server.Queue[j] = server.Queue[j], server.Queue[i]
-	}
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(server.Queue), func(i, j int) { server.Queue[i], server.Queue[j] = server.Queue[j], server.Queue[i] })
 }
 
 func (server *Server) triggerUpdate() {
@@ -116,7 +146,7 @@ func (server *Server) getQueueSum(userId string) int64 {
 func (server *Server) sortQueue() {
 	target := server.Queue[server.Index]
 	sort.Slice(server.Queue, func(i, j int) bool {
-		return server.Queue[i].Index < server.Queue[j].Index
+		return server.Queue[i].Rank < server.Queue[j].Rank
 	})
 	for index, queueItem := range server.Queue {
 		if target == queueItem {
@@ -125,11 +155,11 @@ func (server *Server) sortQueue() {
 	}
 }
 
-func (server *Server) currentIndex() int64 {
+func (server *Server) currentRank() int64 {
 	if len(server.Queue) == 0 {
 		return 0
 	}
-	return server.Queue[server.Index].Index
+	return server.Queue[server.Index].Rank
 }
 
 func max(x, y int64) int64 {

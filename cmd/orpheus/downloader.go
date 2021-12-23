@@ -12,40 +12,49 @@ import (
 	mp3 "github.com/hajimehoshi/go-mp3"
 )
 
-func fetchSongFromURL(url string) (song *Song, err error) {
-	metaDataProcess := exec.Command("yt-dlp", "--print", "%(title)s\n%(id)s\n%(duration)d", "--no-warnings", url)
+func fetchSongsFromURL(url string, playlist bool) (songs []*Song, err error) {
+	listFlag := "--no-playlist"
+	if playlist {
+		listFlag = "--yes-playlist"
+	}
+	metaDataProcess := exec.Command("yt-dlp", listFlag, "--print", "%(title)s\n%(id)s\n%(duration)d", "--no-warnings", url)
 	metaData, err := metaDataProcess.Output()
 	if err != nil {
 		return nil, err
 	}
 	tokens := strings.Split(string(metaData), "\n")
-	song = &Song{
-		Name:         tokens[0],
-		ID:           tokens[1],
-		File:         "./data/" + tokens[1] + ".mp3",
-		IsDownloaded: true,
-		download:     make(chan int),
-	}
-
-	if _, err := os.Stat(song.File); errors.Is(err, os.ErrNotExist) {
-		song.IsDownloaded = false
-		go downloadSong(url, song)
-	}
-
-	if song.IsDownloaded {
-		_, song.Length, err = getMP3MetaData(song.File)
-		if err != nil {
-			return nil, err
+	numSongs := len(tokens) / 3
+	songs = make([]*Song, 0)
+	for i := 0; i < numSongs; i++ {
+		song := &Song{
+			Name:         tokens[i*3],
+			ID:           tokens[i*3+1],
+			File:         "./data/" + tokens[i*3+1] + ".mp3",
+			IsDownloaded: true,
+			download:     make(chan int),
 		}
-	} else {
-		seconds, err := strconv.Atoi(tokens[2])
-		song.Length = time.Second * time.Duration(seconds)
-		if err != nil {
-			return nil, err
+
+		if _, err := os.Stat(song.File); errors.Is(err, os.ErrNotExist) {
+			song.IsDownloaded = false
+			go downloadSong(song.ID, song)
 		}
+
+		if song.IsDownloaded {
+			_, song.Length, err = getMP3MetaData(song.File)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			seconds, err := strconv.Atoi(tokens[i*3+2])
+			song.Length = time.Second * time.Duration(seconds)
+			if err != nil {
+				return nil, err
+			}
+		}
+		songs = append(songs, song)
 	}
 
-	return song, nil
+	return songs, nil
 }
 
 func downloadSong(url string, song *Song) error {

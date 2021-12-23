@@ -16,7 +16,7 @@ type QueueItem struct {
 	Song     *Song  `json:"song"`
 	QueuedBy string `json:"queued_by"`
 	Dynamic  bool   `json:"dynamic"`
-	Index    int64  `json:"index"`
+	Rank     int64  `json:"rank"`
 }
 
 type Song struct {
@@ -44,9 +44,9 @@ func getServer(id string) *Server {
 	_, ok := servers[id]
 	if !ok {
 		servers[id] = &Server{
-			ID:    id,
-			Queue: make([]*QueueItem, 0),
-			Index: 0,
+			ID:         id,
+			Queue:      make([]*QueueItem, 0),
+			Index:      0,
 			NextPolicy: LoopQueue,
 		}
 		servers[id].Player.Callback = servers[id].nextSong
