@@ -109,7 +109,10 @@ func (server *Server) Shuffle() {
 		item.Dynamic = false
 	}
 	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(server.Queue), func(i, j int) { server.Queue[i], server.Queue[j] = server.Queue[j], server.Queue[i] })
+	rand.Shuffle(len(server.Queue)-server.Index-1, func(i, j int) {
+		server.Queue[i+server.Index+1], server.Queue[j+server.Index+1] =
+			server.Queue[j+server.Index+1], server.Queue[i+server.Index+1]
+	})
 }
 
 func (server *Server) triggerUpdate() {
