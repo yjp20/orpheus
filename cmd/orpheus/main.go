@@ -17,14 +17,19 @@ var (
 func main() {
 	flag.Parse()
 
+	log.Println("Connecting session...")
 	session, err := discordgo.New("Bot " + *token)
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
+
 	err = session.Open()
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
+	log.Println("Connected bot...")
 
 	// Discord command-based controller
 	session.AddHandler(commandHandler)
@@ -32,5 +37,8 @@ func main() {
 
 	// Web-based controller
 	server := serverAPI(session, *addr, *cors)
-	server.ListenAndServe()
+	err = server.ListenAndServe()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
