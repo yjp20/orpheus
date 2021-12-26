@@ -169,7 +169,7 @@ func TestAdd(t *testing.T) {
 			item := server.Add(song, test.users[index], false, test.policies[index])
 			fmt.Printf("item number %d Index %d\n", index, item[0].Rank)
 		}
-		queue := PrintQueue(server)
+		queue := PrintQueue(server, server.Index)
 		if queue != test.ans {
 			t.Errorf("Current Queue:\n%s\nDesired Queue:\n%s", queue, test.ans)
 		}
@@ -241,7 +241,7 @@ func TestSkipTo(t *testing.T) {
 				ct += 1
 			}
 		}
-		queue := PrintQueue(server)
+		queue := PrintQueue(server, server.Index)
 		if queue != skipTests[i].ans {
 			t.Errorf("Current Queue:\n%s\nDesired Queue:\n%s", queue, skipTests[i].ans)
 		}
@@ -302,7 +302,7 @@ func TestMove(t *testing.T) {
 		for index, from := range MoveTests[i].fromIndex {
 			server.Move(from, MoveTests[i].toIndex[index])
 		}
-		queue := PrintQueue(server)
+		queue := PrintQueue(server, server.Index)
 		if queue != MoveTests[i].ans {
 			t.Errorf("Current Queue:\n%s\nDesired Queue:\n%s", queue, MoveTests[i].ans)
 		}
@@ -373,7 +373,7 @@ func TestRemove(t *testing.T) {
 				ct += 1
 			}
 		}
-		queue := PrintQueue(server)
+		queue := PrintQueue(server, server.Index)
 		if queue != RemoveTests[i].ans {
 			t.Errorf("Current Queue:\n%s\nDesired Queue:\n%s", queue, RemoveTests[i].ans)
 		}

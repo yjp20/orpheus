@@ -12,7 +12,16 @@ import (
 
 var commands = []*discordgo.ApplicationCommand{
 	{Name: "join", Description: "Join channel"},
-	{Name: "queue", Description: "Show queue"},
+	{Name: "queue", Description: "Show queue",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionInteger,
+				Name:        "index",
+				Description: "location in current queue to show",
+				Required:    false,
+			},
+		},
+	},
 	{Name: "pause", Description: "Pause playing"},
 	{Name: "resume", Description: "Resume playing"},
 	{Name: "add", Description: "Adds a single song to the queue",
@@ -199,7 +208,7 @@ var commands = []*discordgo.ApplicationCommand{
 			},
 		},
 	},
-	{Name: "shuffle", Description: "Shuffles the queue"},
+	{Name: "shuffle", Description: "Shuffles the queue after the current song"},
 	{Name: "nowplaying", Description: "Shows the currently playing song"},
 	{Name: "clear", Description: "Removes all songs from the queue and stops playing"},
 	{Name: "help", Description: "Prints all available commands"},
@@ -264,7 +273,11 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			response = "Queue is empty\n"
 			break
 		}
-		response = PrintQueue(server)
+		center := server.Index
+		if len(m.ApplicationCommandData().Options) >= 1 {
+			center = int(m.ApplicationCommandData().Options[0].IntValue())
+		}
+		response = PrintQueue(server, center)
 
 	case "pause":
 		server.Player.Pause()
@@ -286,6 +299,10 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	case "seek":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
+		if time.Duration(float64(time.Second)*seconds) >= server.Queue[server.Index].Song.Length || seconds < 0 {
+			response = "Seek value out of range\n"
+			break
+		}
 		server.Player.Seek(seconds)
 		response = formatCurrentSong("Seek", server)
 
@@ -454,14 +471,18 @@ func formatDuration(duration time.Duration) string {
 	return fmt.Sprintf("%d:%02d", minutes, seconds)
 }
 
-func PrintQueue(server *Server) string {
+func PrintQueue(server *Server, center int) string {
 	lines := make([]string, 0)
 	for index, queueItem := range server.Queue {
 		indexString := fmt.Sprintf("%d. ", index)
-		if index == server.Index {
-			lines = append(lines, formatCurrentSong(indexString, server))
-		} else {
-			lines = append(lines, formatSong(indexString, server, queueItem))
+		if index > center+10 {
+			break
+		} else if index >= center-10 {
+			if index == server.Index {
+				lines = append(lines, formatCurrentSong(indexString, server))
+			} else {
+				lines = append(lines, formatSong(indexString, server, queueItem))
+			}
 		}
 	}
 	return strings.Join(lines, "\n")
