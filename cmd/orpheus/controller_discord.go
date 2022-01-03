@@ -257,15 +257,16 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		response = formatCurrentSong("Paused", g)
 
 	case "resume":
-		if g.Queue.Index == -1 && len(g.Queue.List) > 0 {
+		if g.Queue.CurrentItem() == nil && len(g.Queue.List) > 0 {
 			g.Queue.SkipTo(0)
 		}
 		g.Player.Resume()
 		response = formatCurrentSong("Resumed", g)
 
 	case "fastforward":
-		if g.Queue.Index == -1 {
+		if g.Queue.CurrentItem() == nil {
 			response = "Not playing any song to fast-forward"
+			break
 		}
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		g.Player.FastForward(seconds)
@@ -278,8 +279,13 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 
 	case "seek":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
-		if time.Second*time.Duration(seconds) >= g.Queue.List[g.Queue.Index].Song.Length || seconds < 0 {
-			response = "Seek value out of range\n"
+		item := g.Queue.CurrentItem()
+		if item == nil {
+			response = "Not playing any song to seek"
+			break
+		}
+		if time.Duration(float64(time.Second)*seconds) >= item.Song.Length || seconds < 0 {
+			response = "Seek value out of range"
 			break
 		}
 		g.Player.Seek(seconds)
@@ -297,7 +303,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 	case "goto":
 		index := int(m.ApplicationCommandData().Options[0].IntValue())
 		if index >= len(g.Queue.List) || index < 0 {
-			response = "index out of range"
+			response = "Index out of range"
 			break
 		}
 		g.Queue.SkipTo(index)
@@ -431,16 +437,16 @@ func joinHandler(s *discordgo.Session, m *discordgo.GuildCreate) {
 }
 
 func formatCurrentSong(status string, g *Guild) string {
-	if g.Queue.Index == -1 {
+	item := g.Queue.CurrentItem()
+	if item == nil {
 		return status
 	}
-	queueItem := g.Queue.List[g.Queue.Index]
 	return fmt.Sprintf(
 		"%s **%s** (%s/%s)",
 		status,
-		queueItem.Song.Name,
+		item.Song.Name,
 		formatDuration(g.Player.Time),
-		formatDuration(queueItem.Song.Length),
+		formatDuration(item.Song.Length),
 	)
 }
 

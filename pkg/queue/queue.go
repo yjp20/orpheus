@@ -53,6 +53,7 @@ func NewQueue() Queue {
 // Adds multiple songs to the queue based on policy.
 func (q *Queue) Add(songs []*music.Song, userId string, shuffle bool, policy AddPolicy) []*QueueItem {
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	items := make([]*QueueItem, len(songs))
 	for i, song := range songs {
 		items[i] = &QueueItem{song, userId}
@@ -111,60 +112,69 @@ func (q *Queue) Add(songs []*music.Song, userId string, shuffle bool, policy Add
 		q.Index = q.Index + 1
 		q.update()
 	}
-	q.mu.Unlock()
 	return items
 }
 
 func (q *Queue) SkipTo(index int) (*QueueItem, error) {
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	if index >= len(q.List) || index < 0 {
 		return nil, fmt.Errorf("index out of bounds")
 	}
 	q.Dynamic = 0
 	q.Index = index
 	q.update()
-	q.mu.Unlock()
 	return q.List[index], nil
 }
 
 func (q *Queue) Move(from, to int) (*QueueItem, error) {
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	if from >= len(q.List) || to >= len(q.List) || from < 0 || to < 0 {
 		return nil, fmt.Errorf("index out of bounds")
 	}
 	q.Dynamic = 0
 	target := q.List[from]
 	q.List = append(q.List[:from], q.List[from+1:]...)
-	q.mu.Unlock()
 	return target, nil
 }
 
 func (q *Queue) Remove(index int) (*QueueItem, error) {
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	if index >= len(q.List) || index < 0 {
 		return nil, fmt.Errorf("index out of bounds")
 	}
 	target := q.List[index]
 	q.List = append(q.List[:index], q.List[index+1:]...)
-	if index == q.Index {
-		q.update()
-	} else if index < q.Index {
+
+	if index < q.Index {
 		q.Index -= 1
 	}
-	q.mu.Unlock()
+	if index < q.Dynamic {
+		q.Dynamic -= 1
+	}
+
+	if index == q.Index {
+		q.update()
+	}
 	return target, nil
 }
 
 // Clears the queue
 func (q *Queue) Clear() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.List = []*QueueItem{}
 	q.Index = -1
+	q.Dynamic = 0
 	q.update()
 }
 
 // Shuffles all items from the current index+1 to the end of the queue.
 func (q *Queue) Shuffle() {
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	if len(q.List) == 0 {
 		return
 	}
@@ -173,13 +183,14 @@ func (q *Queue) Shuffle() {
 	rand.Shuffle(len(q.List)-offset, func(i, j int) {
 		q.List[i+offset], q.List[j+offset] = q.List[j+offset], q.List[i+offset]
 	})
-	q.mu.Unlock()
+	q.Dynamic = 0
 }
 
 // Loads the next item in the queue determined by policy defined by the
 // NextPolicy member of Queue.
 func (q *Queue) NextSong() {
 	q.mu.Lock()
+	defer q.mu.Unlock()
 	if len(q.List) == 0 {
 		return
 	}
@@ -195,7 +206,6 @@ func (q *Queue) NextSong() {
 		}
 	}
 	q.update()
-	q.mu.Unlock()
 }
 
 // Returns the current item in the queue that should be being played. Returns
