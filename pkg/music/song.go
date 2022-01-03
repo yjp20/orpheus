@@ -33,8 +33,9 @@ func FetchFromURL(url string, playlist bool) (songs []*Song, err error) {
 	if playlist {
 		listFlag = "--yes-playlist"
 	}
-	metaDataProcess := exec.Command("yt-dlp", listFlag, "--id", "-q", "-f", "ba", "-x", "--audio-format", "wav", "--no-simulate", "--print", "%(title)s\n%(id)s\n%(duration)d\n%(acodec)s", "-P", "./data", "--no-warnings", url)
-	metaData, err := metaDataProcess.Output()
+
+	process := exec.Command("yt-dlp", listFlag, "--id", "-q", "-f", "ba", "-x", "--audio-format", "wav", "--no-simulate", "--print", "%(title)s\n%(id)s\n%(duration)d\n%(acodec)s", "-P", "./data", "--no-warnings", url)
+	metaData, err := process.Output()
 	if err != nil {
 		return nil, err
 	}
