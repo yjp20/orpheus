@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yjp20/orpheus/pkg/music"
+	"github.com/yjp20/orpheus/pkg/queue"
+
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -38,22 +41,10 @@ var commands = []*discordgo.ApplicationCommand{
 				Description: "when to play queued song",
 				Required:    false,
 				Choices: []*discordgo.ApplicationCommandOptionChoice{
-					{
-						Name:  "now",
-						Value: Now,
-					},
-					{
-						Name:  "next",
-						Value: Next,
-					},
-					{
-						Name:  "last",
-						Value: Last,
-					},
-					{
-						Name:  "normal",
-						Value: Smart,
-					},
+					{Name: "now", Value: queue.Now},
+					{Name: "next", Value: queue.Next},
+					{Name: "last", Value: queue.Last},
+					{Name: "normal", Value: queue.Smart},
 				},
 			},
 		},
@@ -88,22 +79,10 @@ var commands = []*discordgo.ApplicationCommand{
 				Description: "when to play queued song",
 				Required:    false,
 				Choices: []*discordgo.ApplicationCommandOptionChoice{
-					{
-						Name:  "now",
-						Value: Now,
-					},
-					{
-						Name:  "next",
-						Value: Next,
-					},
-					{
-						Name:  "last",
-						Value: Last,
-					},
-					{
-						Name:  "normal",
-						Value: Smart,
-					},
+					{Name: "now", Value: queue.Now},
+					{Name: "next", Value: queue.Next},
+					{Name: "last", Value: queue.Last},
+					{Name: "normal", Value: queue.Smart},
 				},
 			},
 		},
@@ -192,18 +171,9 @@ var commands = []*discordgo.ApplicationCommand{
 				Description: "looping mode of the queue",
 				Required:    true,
 				Choices: []*discordgo.ApplicationCommandOptionChoice{
-					{
-						Name:  "one",
-						Value: LoopSong,
-					},
-					{
-						Name:  "all",
-						Value: LoopQueue,
-					},
-					{
-						Name:  "off",
-						Value: NoLoop,
-					},
+					{Name: "one", Value: queue.LoopSong},
+					{Name: "all", Value: queue.LoopQueue},
+					{Name: "off", Value: queue.NoLoop},
 				},
 			},
 		},
@@ -229,32 +199,35 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 	//perms>>discordgo.PermissionAdministrator&1 == 1
 
 	var response string
-	server := getServer(m.GuildID)
+	g := GetGuild(m.GuildID)
 
 	switch m.ApplicationCommandData().Name {
 	case "add":
+		if g.Player.Voice == nil {
+			g.joinVoiceOfUser(s, m.GuildID, m.Member.User.ID)
+		}
 		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		})
-		song, err := fetchSongsFromURL(m.ApplicationCommandData().Options[0].StringValue(), false)
+		song, err := music.FetchFromURL(m.ApplicationCommandData().Options[0].StringValue(), false)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
 		}
-		policy := Smart
+		policy := queue.Smart
 		if len(m.ApplicationCommandData().Options) > 1 {
-			policy = addPolicy(m.ApplicationCommandData().Options[1].IntValue())
+			policy = queue.AddPolicy(m.ApplicationCommandData().Options[1].IntValue())
 		}
-		queueItem := server.Add(song, s.State.User.ID, false, policy)
+		queueItem := g.Queue.Add(song, s.State.User.ID, false, policy)
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong("Add", server, queueItem[0]),
+			Content: formatSong("Add", g, queueItem[0]),
 		})
 
 	case "addlist":
 		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		})
-		songs, err := fetchSongsFromURL(m.ApplicationCommandData().Options[0].StringValue(), true)
+		songs, err := music.FetchFromURL(m.ApplicationCommandData().Options[0].StringValue(), true)
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
@@ -263,117 +236,102 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		if len(m.ApplicationCommandData().Options) > 1 {
 			shuffle = m.ApplicationCommandData().Options[1].BoolValue()
 		}
-		queueItems := server.Add(songs, s.State.User.ID, shuffle, Smart)
+		queueItems := g.Queue.Add(songs, s.State.User.ID, shuffle, queue.Smart)
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong("Add", server, queueItems[0]) + fmt.Sprintf(" and %d others", len(queueItems)-1),
+			Content: formatSong("Add", g, queueItems[0]) + fmt.Sprintf(" and %d others", len(queueItems)-1),
 		})
 
 	case "queue":
-		if len(server.Queue) == 0 {
+		if len(g.Queue.List) == 0 {
 			response = "Queue is empty\n"
 			break
 		}
-		center := server.Index
+		center := g.Queue.Index
 		if len(m.ApplicationCommandData().Options) >= 1 {
 			center = int(m.ApplicationCommandData().Options[0].IntValue())
 		}
-		response = PrintQueue(server, center)
+		response = PrintQueue(g, center)
 
 	case "pause":
-		server.Player.Pause()
-		response = formatCurrentSong("Pause", server)
+		g.Player.Pause()
+		response = formatCurrentSong("Paused", g)
 
 	case "resume":
-		server.Player.Resume()
-		response = formatCurrentSong("Resumed", server)
+		if g.Queue.Index == -1 && len(g.Queue.List) > 0 {
+			g.Queue.SkipTo(0)
+		}
+		g.Player.Resume()
+		response = formatCurrentSong("Resumed", g)
 
 	case "fastforward":
+		if g.Queue.Index == -1 {
+			response = "Not playing any song to fast-forward"
+		}
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
-		server.Player.FastForward(seconds)
-		response = formatCurrentSong("Fast-forward", server)
+		g.Player.FastForward(seconds)
+		response = formatCurrentSong("Fast-forwarded", g)
 
 	case "rewind":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
-		server.Player.FastForward(-seconds)
-		response = formatCurrentSong("Rewind", server)
+		g.Player.FastForward(-seconds)
+		response = formatCurrentSong("Rewound", g)
 
 	case "seek":
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
-		if time.Duration(float64(time.Second)*seconds) >= server.Queue[server.Index].Song.Length || seconds < 0 {
+		if time.Second*time.Duration(seconds) >= g.Queue.List[g.Queue.Index].Song.Length || seconds < 0 {
 			response = "Seek value out of range\n"
 			break
 		}
-		server.Player.Seek(seconds)
-		response = formatCurrentSong("Seek", server)
+		g.Player.Seek(seconds)
+		response = formatCurrentSong("Seek", g)
 
 	case "skip":
 		skip := 1
 		if len(m.ApplicationCommandData().Options) >= 1 {
 			skip = int(m.ApplicationCommandData().Options[0].IntValue())
 		}
-		index := (server.Index + skip) % len(server.Queue)
-		server.SkipTo(index)
-		response = formatCurrentSong("Skip to", server)
+		index := (g.Queue.Index + skip) % len(g.Queue.List)
+		g.Queue.SkipTo(index)
+		response = formatCurrentSong("Skipped to", g)
 
 	case "goto":
 		index := int(m.ApplicationCommandData().Options[0].IntValue())
-		if index >= len(server.Queue) || index < 0 {
+		if index >= len(g.Queue.List) || index < 0 {
 			response = "index out of range"
 			break
 		}
-		server.SkipTo(index)
-		response = formatCurrentSong("Skip to", server)
+		g.Queue.SkipTo(index)
+		response = formatCurrentSong("Go to", g)
 
 	case "remove":
-		index := server.Index
+		index := g.Queue.Index
 		if len(m.ApplicationCommandData().Options) >= 1 {
 			index = int(m.ApplicationCommandData().Options[0].IntValue())
 		}
-		queueItem, err := server.Remove(index)
+		queueItem, err := g.Queue.Remove(index)
 		if err != nil {
 			log.Printf("Failed to remove song\nerror: %s\n", err)
 		}
-		response = formatSong("Remove", server, queueItem)
+		response = formatSong("Remove", g, queueItem)
 
 	case "join":
-		guild, err := s.State.Guild(m.GuildID)
-		if err != nil {
-			log.Printf("failed to fetch guild '%s'\nerror: %s\n", m.GuildID, err)
-			return
-		}
-		channelID := ""
-		for _, vs := range guild.VoiceStates {
-			if vs.UserID == m.Member.User.ID {
-				channelID = vs.ChannelID
-			}
-		}
-		channel, err := s.State.Channel(channelID)
-		if err != nil {
-			log.Printf("failed to fetch channel '%s'\nerror: %s\n", channelID, err)
-			return
-		}
-		server.Player.Voice, err = s.ChannelVoiceJoin(m.GuildID, channelID, false, false)
-		if err != nil {
-			log.Printf("failed to join channel '%s'\nerror: %s\n", channelID, err)
-			return
-		}
-		response = fmt.Sprintf("Joining channel '%s'", channel.Name)
+		response = g.joinVoiceOfUser(s, m.GuildID, m.Member.User.ID)
 
 	case "shuffle":
-		server.Shuffle()
-		response = fmt.Sprintf("Shuffling the queue...")
+		g.Queue.Shuffle()
+		response = fmt.Sprintf("Shuffled queue")
 
 	case "nowplaying":
-		response = formatCurrentSong("Currently Playing: ", server)
+		response = formatCurrentSong("Currently Playing: ", g)
 
 	case "loop":
-		server.NextPolicy = NextPolicy(m.ApplicationCommandData().Options[0].IntValue())
-		switch server.NextPolicy {
-		case NoLoop:
+		g.Queue.NextPolicy = queue.NextPolicy(m.ApplicationCommandData().Options[0].IntValue())
+		switch g.Queue.NextPolicy {
+		case queue.NoLoop:
 			response = "Looping turned off"
-		case LoopSong:
+		case queue.LoopSong:
 			response = "Now looping current song"
-		case LoopQueue:
+		case queue.LoopQueue:
 			response = "Now looping queue"
 		}
 
@@ -387,18 +345,18 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			log.Printf("failed to load search result matching \"%s\"\n", m.ApplicationCommandData().Options[0].StringValue())
 			return
 		}
-		song, err := fetchSongsFromURL(string(metaData), false)
+		song, err := music.FetchFromURL(string(metaData), false)
 		if err != nil {
 			log.Printf("failed to fetch song\nerror: %s\n", err)
 			return
 		}
-		policy := Smart
+		policy := queue.Smart
 		if len(m.ApplicationCommandData().Options) > 1 {
-			policy = addPolicy(m.ApplicationCommandData().Options[1].IntValue())
+			policy = queue.AddPolicy(m.ApplicationCommandData().Options[1].IntValue())
 		}
-		queueItem := server.Add(song, s.State.User.ID, false, policy)
+		queueItem := g.Queue.Add(song, s.State.User.ID, false, policy)
 		s.InteractionResponseEdit(*appID, m.Interaction, &discordgo.WebhookEdit{
-			Content: formatSong("Add", server, queueItem[0]),
+			Content: formatSong("Add", g, queueItem[0]),
 		})
 
 	case "help":
@@ -410,13 +368,17 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		response = strings.Join(lines, "\n")
 
 	case "move":
-		server.Move(int(m.ApplicationCommandData().Options[0].IntValue()), int(m.ApplicationCommandData().Options[1].IntValue()))
-		response = fmt.Sprintf("Move **%s** from index %d to index %d\n", server.Queue[m.ApplicationCommandData().Options[1].IntValue()].Song.Name,
-			m.ApplicationCommandData().Options[0].IntValue(), m.ApplicationCommandData().Options[1].IntValue())
+		from := int(m.ApplicationCommandData().Options[0].IntValue())
+		to := int(m.ApplicationCommandData().Options[1].IntValue())
+		item, err := g.Queue.Move(from, to)
+		if err != nil {
+			// TODO handle error
+		}
+		response = fmt.Sprintf("Move **%s** from index %d to index %d\n", item.Song.Name, from, to)
 
 	case "clear":
-		server.Clear()
-		response = "Queue has been cleared\n"
+		g.Queue.Clear()
+		response = "Cleared queue"
 	}
 
 	if response != "" {
@@ -429,29 +391,60 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 	}
 }
 
+func (g *Guild) joinVoiceOfUser(s *discordgo.Session, guildID string, userID string) string {
+	guild, err := s.State.Guild(guildID)
+	if err != nil {
+		log.Print(err)
+		return fmt.Sprintf("failed to fetch guild '%s'\nerror: %s\n", guildID, err)
+	}
+	channelID := ""
+	for _, vs := range guild.VoiceStates {
+		if vs.UserID == userID {
+			channelID = vs.ChannelID
+		}
+	}
+	if channelID == "" {
+		return "User not in a voice channel"
+	}
+	channel, err := s.State.Channel(channelID)
+	if err != nil {
+		log.Print(err)
+		return fmt.Sprintf("failed to join channel '%s'\nerror: %s\n", channelID, err)
+	}
+	g.Player.Voice, err = s.ChannelVoiceJoin(guildID, channelID, false, false)
+	if err != nil {
+		log.Print(err)
+		return fmt.Sprintf("failed to join channel '%s'\nerror: %s\n", channelID, err)
+	}
+	return fmt.Sprintf("Joining channel '%s'", channel.Name)
+}
+
 func joinHandler(s *discordgo.Session, m *discordgo.GuildCreate) {
 	if m.Guild.Unavailable {
 		return
 	}
-	getServer(m.Guild.ID)
+	GetGuild(m.Guild.ID)
 	err := initCommands(s, m.Guild.ID)
 	if err != nil {
 		log.Printf("failed to init commands in guild '%s'\n%s\n", m.Guild.ID, err)
 	}
 }
 
-func formatCurrentSong(status string, server *Server) string {
-	queueItem := server.Queue[server.Index]
+func formatCurrentSong(status string, g *Guild) string {
+	if g.Queue.Index == -1 {
+		return status
+	}
+	queueItem := g.Queue.List[g.Queue.Index]
 	return fmt.Sprintf(
 		"%s **%s** (%s/%s)",
 		status,
 		queueItem.Song.Name,
-		formatDuration(server.Player.Time),
+		formatDuration(g.Player.Time),
 		formatDuration(queueItem.Song.Length),
 	)
 }
 
-func formatSong(status string, server *Server, queueItem *QueueItem) string {
+func formatSong(status string, g *Guild, queueItem *queue.QueueItem) string {
 	return fmt.Sprintf(
 		"%s **%s** (%s)",
 		status,
@@ -471,17 +464,15 @@ func formatDuration(duration time.Duration) string {
 	return fmt.Sprintf("%d:%02d", minutes, seconds)
 }
 
-func PrintQueue(server *Server, center int) string {
+func PrintQueue(g *Guild, center int) string {
 	lines := make([]string, 0)
-	for index, queueItem := range server.Queue {
+	for index, queueItem := range g.Queue.List {
 		indexString := fmt.Sprintf("%d. ", index)
-		if index > center+10 {
-			break
-		} else if index >= center-10 {
-			if index == server.Index {
-				lines = append(lines, formatCurrentSong(indexString, server))
+		if center-10 <= index && index <= center+10 {
+			if index == g.Queue.Index {
+				lines = append(lines, formatCurrentSong(indexString, g))
 			} else {
-				lines = append(lines, formatSong(indexString, server, queueItem))
+				lines = append(lines, formatSong(indexString, g, queueItem))
 			}
 		}
 	}

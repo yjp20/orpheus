@@ -11,6 +11,9 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/julienschmidt/httprouter"
+
+	"github.com/yjp20/orpheus/pkg/music"
+	"github.com/yjp20/orpheus/pkg/queue"
 )
 
 type App struct {
@@ -149,9 +152,9 @@ func (app *App) addQueue(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		app.badRequestResponse(w, err)
 	}
 
-	server := getServer(input.GuildID)
-	songs, _ := fetchSongsFromURL(input.Url, false)
-	song := server.Add(songs, input.UserId, false, Smart)
+	g := GetGuild(input.GuildID)
+	songs, _ := music.FetchFromURL(input.Url, false)
+	song := g.Queue.Add(songs, input.UserId, false, queue.Smart)
 	app.writeJSON(w, 200, &(song[0]))
 }
 
@@ -161,5 +164,5 @@ func (app *App) getServer(w http.ResponseWriter, r *http.Request, ps httprouter.
 	}
 
 	input.GuildID = r.URL.Query().Get("guild_id")
-	app.writeJSON(w, 200, getServer(input.GuildID))
+	app.writeJSON(w, 200, GetGuild(input.GuildID))
 }

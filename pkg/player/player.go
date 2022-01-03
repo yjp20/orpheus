@@ -1,4 +1,4 @@
-package main
+package player
 
 import (
 	"fmt"
@@ -12,18 +12,22 @@ import (
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"layeh.com/gopus"
+
+	"github.com/yjp20/orpheus/pkg/music"
 )
 
 const (
-	BYTES_IN_FRAME = int64(2)
+	CHANNELS    = 2
+	SAMPLE_RATE = 48000
+	FRAME_SIZE  = SAMPLE_RATE / 50
 )
 
 type Player struct {
-	Playing  bool
-	Time     time.Duration
-	Song     *Song
-	Voice    *discordgo.VoiceConnection
-	Callback func(killed bool)
+	Playing       bool
+	Time          time.Duration
+	Song          *music.Song
+	Voice         *discordgo.VoiceConnection
+	FinishHandler func()
 
 	events chan playerEvent
 	mu     sync.Mutex
@@ -38,72 +42,80 @@ const (
 	seek
 )
 
-func (p *Player) PlaySong(song *Song) error {
-	p.killWorker()
-
+func (p *Player) Stop() {
 	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Playing = false
+	p.Time = 0
+	p.killWorker()
+}
+
+func (p *Player) PlaySong(song *music.Song) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.killWorker()
+	if p.Song == nil {
+		p.Playing = false
+		p.Time = 0
+		return
+	}
 	p.Playing = true
 	p.Song = song
 	p.Time = 0
-	p.mu.Unlock()
 
 	err := p.startWorker()
 	if err != nil {
 		log.Println(err)
 	}
-	return err
 }
 
 func (p *Player) Resume() {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.Playing = true
 	if p.events != nil {
 		p.events <- resume
 	}
-	p.mu.Unlock()
 }
 
 func (p *Player) Pause() {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.Playing = false
 	if p.events != nil {
 		p.events <- pause
 	}
-	p.mu.Unlock()
 }
 
 func (p *Player) FastForward(seconds float64) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	p.Time = p.clampTime(p.Time + time.Duration(float64(time.Second)*seconds))
 	if p.events != nil {
 		p.events <- seek
 	}
-	p.mu.Unlock()
 }
 
 func (p *Player) Seek(seconds float64) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.events != nil {
 		p.Time = p.clampTime(time.Duration(float64(time.Second) * seconds))
 		p.events <- seek
 	}
-	p.mu.Unlock()
 }
 
 func (p *Player) seek(decoder io.Seeker) error {
-	offset := BYTES_IN_FRAME * (int64(p.Time) / (int64(time.Second) / int64(48000)))
+	offset := 2 * CHANNELS * int64(p.Time) * SAMPLE_RATE / int64(time.Second)
 	_, err := decoder.Seek(offset, io.SeekStart)
 	return err
 }
 
 func (p *Player) killWorker() {
-	p.mu.Lock()
 	if p.events != nil {
-		events := p.events
-		p.events = nil
-		events <- kill
+		p.events <- kill
 	}
-	p.mu.Unlock()
 }
 
 func (p *Player) startWorker() error {
@@ -121,25 +133,25 @@ func (p *Player) startWorker() error {
 		return err
 	}
 
+	p.events = make(chan playerEvent)
 	go p.audioWorker(decoder)
 	return nil
 }
 
 func (p *Player) audioWorker(decoder *wav.Decoder) {
 	killed := false
-	events := make(chan playerEvent)
-	p.mu.Lock()
-	p.events = events
-	p.mu.Unlock()
 
-	sampleRate := 48000
-	frameSize := sampleRate / 50
-	encoder, _ := gopus.NewEncoder(sampleRate, 2, gopus.Audio)
-	buffer16 := make([]int16, frameSize*2)
-	buffer := audio.IntBuffer{Data: make([]int, frameSize*2)}
+	encoder, _ := gopus.NewEncoder(SAMPLE_RATE, CHANNELS, gopus.Audio)
+	buffer16 := make([]int16, FRAME_SIZE*CHANNELS)
+	buffer := audio.IntBuffer{Data: make([]int, FRAME_SIZE*CHANNELS)}
 
 	for p.Voice == nil {
-		<-events
+		select {
+		case <-p.events:
+			continue
+		default:
+			continue
+		}
 	}
 
 	if p.Playing {
@@ -152,7 +164,7 @@ playing:
 	p.Voice.Speaking(true)
 	for {
 		select {
-		case e := <-events:
+		case e := <-p.events:
 			switch e {
 			case kill:
 				killed = true
@@ -173,39 +185,40 @@ playing:
 			for i, v := range buffer.Data {
 				buffer16[i] = int16(v)
 			}
-			res, err := encoder.Encode(buffer16, frameSize, frameSize*4)
+			res, err := encoder.Encode(buffer16, FRAME_SIZE, FRAME_SIZE*4)
 			if err != nil {
 				goto cleanup
 			}
-			p.Time += time.Duration(int64(time.Second) / 48000 * int64(len(buffer16)) / BYTES_IN_FRAME)
+			p.Time += time.Second * FRAME_SIZE / SAMPLE_RATE
 			p.Voice.OpusSend <- res
+			if p.Time >= p.Song.Length {
+				goto cleanup
+			}
 		}
 	}
 
 paused:
 	p.Voice.Speaking(false)
 	for {
-		select {
-		case e := <-events:
-			switch e {
-			case kill:
-				killed = true
-				goto cleanup
-			case resume:
-				goto playing
-			case pause:
-				continue
-			case seek:
-				p.seek(decoder)
-			}
+		switch <-p.events {
+		case kill:
+			killed = true
+			goto cleanup
+		case resume:
+			goto playing
+		case pause:
+			continue
+		case seek:
+			p.seek(decoder)
 		}
 	}
 
 cleanup:
 	p.Voice.Speaking(false)
-	close(events)
-	if p.Callback != nil {
-		go p.Callback(killed)
+	close(p.events)
+	p.events = nil
+	if !killed && p.FinishHandler != nil {
+		go p.FinishHandler()
 	}
 }
 

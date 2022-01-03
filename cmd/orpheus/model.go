@@ -1,73 +1,32 @@
 package main
 
 import (
-	"time"
+	"github.com/yjp20/orpheus/pkg/player"
+	"github.com/yjp20/orpheus/pkg/queue"
 )
 
-type Server struct {
-	ID         string       `json:"id"`
-	Queue      []*QueueItem `json:"queue"`
-	Index      int          `json:"index"`
-	Player     Player
-	NextPolicy NextPolicy
+type Guild struct {
+	ID     string       `json:"id"`
+	Queue  queue.Queue `json:"queue"`
+	Player player.Player
 }
 
-type QueueItem struct {
-	Song     *Song  `json:"song"`
-	QueuedBy string `json:"queued_by"`
-	Dynamic  bool   `json:"dynamic"`
-	Rank     int64  `json:"rank"`
-}
+var guilds = make(map[string]*Guild)
 
-type Song struct {
-	ID     string        `json:"id"`
-	Name   string        `json:"name"`
-	URL    string        `json:"url"`
-	Length time.Duration `json:"length"`
-	File   string        `json:"file"`
-	Format Format        `json:"format"`
-}
-
-type NextPolicy int
-
-const (
-	LoopSong NextPolicy = iota
-	LoopQueue
-	NoLoop
-)
-
-type Format int
-
-const (
-	Opus Format = iota
-	Mp3
-	M4a
-	Wav
-	Aac
-	Vorbis
-	Flac
-)
-
-var servers = make(map[string]*Server)
-
-func getServer(id string) *Server {
-	_, ok := servers[id]
+func GetGuild(id string) *Guild {
+	_, ok := guilds[id]
 	if !ok {
-		servers[id] = &Server{
-			ID:         id,
-			Queue:      make([]*QueueItem, 0),
-			Index:      0,
-			NextPolicy: LoopQueue,
-		}
-		servers[id].Player.Callback = servers[id].nextSong
+		guilds[id] = &Guild{ID: id, Queue: queue.NewQueue()}
+		guilds[id].Player.FinishHandler = guilds[id].Queue.NextSong
+		guilds[id].Queue.UpdateHandler = guilds[id].Player.PlaySong
 	}
-	return servers[id]
+	return guilds[id]
 }
 
-func unionServers(serverIDs []string) []string {
+func QueryGuilds(serverIDs []string) []string {
 	ans := make([]string, 0)
 	for _, id := range serverIDs {
-		if _, ok := servers[id]; ok {
+		if _, ok := guilds[id]; ok {
 			ans = append(ans, id)
 		}
 	}

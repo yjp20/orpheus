@@ -1,4 +1,4 @@
-package main
+package music
 
 import (
 	"os/exec"
@@ -7,7 +7,28 @@ import (
 	"time"
 )
 
-func fetchSongsFromURL(url string, playlist bool) (songs []*Song, err error) {
+type Song struct {
+	ID     string        `json:"id"`
+	Name   string        `json:"name"`
+	URL    string        `json:"url"`
+	Length time.Duration `json:"length"`
+	File   string        `json:"file"`
+	Format Format        `json:"format"`
+}
+
+type Format int
+
+const (
+	Opus Format = iota
+	Mp3
+	M4a
+	Wav
+	Aac
+	Vorbis
+	Flac
+)
+
+func FetchFromURL(url string, playlist bool) (songs []*Song, err error) {
 	listFlag := "--no-playlist"
 	if playlist {
 		listFlag = "--yes-playlist"
