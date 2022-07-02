@@ -55,14 +55,14 @@ func (p *Player) PlaySong(song *music.Song) {
 	defer p.mu.Unlock()
 
 	p.killWorker()
-	if p.Song == nil {
-		p.Playing = false
-		p.Time = 0
-		return
-	}
-	p.Playing = true
 	p.Song = song
 	p.Time = 0
+	p.Playing = true
+
+	if p.Song == nil {
+		p.Playing = false
+		return
+	}
 
 	err := p.startWorker()
 	if err != nil {

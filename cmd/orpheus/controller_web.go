@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/julienschmidt/httprouter"
@@ -106,8 +107,23 @@ func serverAPI(session *discordgo.Session, addr, cors string) *http.Server {
 	}
 
 	router := httprouter.New()
-	router.GET("/api/queue", app.getServer)
-	router.POST("/api/queue", app.addQueue)
+	router.GET("/api/guild/:ID/queue", app.getServer)
+	router.POST("/api/guild/:ID/queue/add", app.addQueue)
+	router.POST("/api/guild/:ID/queue/addlist", app.addList)
+	router.POST("/api/guild/:ID/queue/queue", app.Queue)
+	router.POST("/api/guild/:ID/queue/pause", app.Pause)
+	router.POST("/api/guild/:ID/queue/resume", app.Resume)
+	router.POST("/api/guild/:ID/queue/fastforward", app.fastForward)
+	router.POST("/api/guild/:ID/queue/rewind", app.Rewind)
+	router.POST("/api/guild/:ID/queue/seek", app.Seek)
+	router.POST("/api/guild/:ID/queue/skip", app.Skip)
+	router.POST("/api/guild/:ID/queue/goto", app.Goto)
+	router.POST("/api/guild/:ID/queue/remove", app.Remove)
+	router.POST("/api/guild/:ID/queue/shuffle", app.Shuffle)
+	router.POST("/api/guild/:ID/queue/nowplaying", app.nowPlaying)
+	router.POST("/api/guild/:ID/queue/loop", app.Loop)
+	router.POST("/api/guild/:ID/queue/move", app.Move)
+	router.POST("/api/guild/:ID/queue/clear", app.Clear)
 
 	srv := &http.Server{
 		Addr:    addr,
@@ -142,27 +158,264 @@ func (a *App) enableCORS(next http.Handler) http.Handler {
 
 func (app *App) addQueue(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var input struct {
-		GuildID string `json:"guild_id"`
-		Url     string `json:"url"`
-		UserId  string `json:"user_id"`
+		Url    string          `json:"url"`
+		UserId string          `json:"user_id"`
+		Policy queue.AddPolicy `json:"policy"`
+	}
+	input.Policy = queue.Smart
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+
+	g := GetGuild(ps.ByName("ID"))
+	songs, err := music.FetchFromURL(input.Url, false)
+	if err != nil {
+		app.writeError(w, http.StatusNotFound, "failed to add song")
+		return
+	}
+	song := g.Queue.Add(songs, input.UserId, false, input.Policy)
+	app.writeJSON(w, 200, &(song[0]))
+}
+
+func (app *App) addList(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var input struct {
+		Url     string          `json:"url"`
+		UserID  string          `json:"user_id"`
+		Policy  queue.AddPolicy `json:"policy"`
+		Shuffle bool            `json:"shuffle"`
+	}
+	input.Policy = queue.Smart
+	input.Shuffle = false
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+
+	g := GetGuild(ps.ByName("ID"))
+	songs, err := music.FetchFromURL(input.Url, true)
+	if err != nil {
+		app.writeError(w, http.StatusNotFound, "failed to add song")
+	}
+	queueItems := g.Queue.Add(songs, input.UserID, input.Shuffle, input.Policy)
+	app.writeJSON(w, 200, &queueItems)
+}
+
+func (app *App) Queue(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	var input struct {
+		Center int `json:"center"`
+	}
+	input.Center = g.Queue.Index
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+
+	if len(g.Queue.List) == 0 {
+		app.writeJSON(w, 200, "Queue is empty")
+		return
+	}
+	app.writeJSON(w, 200, PrintQueue(g, input.Center))
+}
+
+func (app *App) Pause(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	g.Player.Pause()
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Resume(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	if g.Queue.CurrentItem() == nil && len(g.Queue.List) > 0 {
+		g.Queue.SkipTo(0)
+	}
+	g.Player.Resume()
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) fastForward(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	var input struct {
+		Seconds float64 `json:"seconds"`
 	}
 
 	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.badRequestResponse(w, err)
+		return
 	}
 
-	g := GetGuild(input.GuildID)
-	songs, _ := music.FetchFromURL(input.Url, false)
-	song := g.Queue.Add(songs, input.UserId, false, queue.Smart)
-	app.writeJSON(w, 200, &(song[0]))
+	if g.Queue.CurrentItem() == nil {
+		app.writeJSON(w, 202, "Not playing any song to fast-forward")
+		return
+	}
+	g.Player.FastForward(input.Seconds)
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Rewind(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+    var input struct {
+        Seconds float64 `json:"seconds"`
+    }
+
+    err := app.readJSON(w, r, &input)
+    if err != nil {
+        app.badRequestResponse(w, err)
+        return
+    }
+
+	if g.Queue.CurrentItem() == nil {
+		app.writeJSON(w, 202, "Not playing any song to rewind")
+		return
+	}
+	g.Player.FastForward(-input.Seconds)
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Seek(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	var input struct {
+		Seconds float64 `json:"seconds"`
+	}
+
+	err := app.readJSON(w, r, &input)
+    if err != nil {
+    	app.badRequestResponse(w, err)
+		return
+    }	
+
+	item := g.Queue.CurrentItem()
+	if item == nil {
+		app.writeJSON(w, 202, "Not playing any song to seek")
+		return
+	}
+	if time.Duration(float64(time.Second)*input.Seconds) >= item.Song.Length || input.Seconds < 0 {
+		app.writeJSON(w, 202, "Seek value out of range")
+		return
+	}
+	g.Player.Seek(input.Seconds)
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Skip(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+    var input struct {
+        Skip int `json:"skip"`
+    }
+	input.Skip = 1
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+	index := (g.Queue.Index + input.Skip) % len(g.Queue.List)
+    g.Queue.SkipTo(index)
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Goto(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	var input struct {
+		Index int `json:"index"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+
+	if input.Index >= len(g.Queue.List) || input.Index < 0 {
+		app.writeJSON(w, 202, "Index out of range")
+		return
+	}
+    g.Queue.SkipTo(input.Index)
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Remove(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	var input struct {
+		Index int `json:"index"`
+	}
+	input.Index = g.Queue.Index
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+
+	queueItem, err := g.Queue.Remove(input.Index)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+	app.writeJSON(w, 202, &queueItem)
+}
+
+func (app *App) Shuffle(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	g.Queue.Shuffle()
+	app.writeJSON(w, 202, "Shuffled queue")
+}
+
+func (app *App) nowPlaying(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	app.writeJSON(w, 202, formatCurrentSong("Currently Playing: ", g))
+}
+
+func (app *App) Loop(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	var input struct {
+		NextPolicy queue.NextPolicy `json:"next_policy"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+	
+	g.Queue.NextPolicy = input.NextPolicy
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Move(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	var input struct {
+		From int `json:"from"`
+		To int `json:"to"`
+	}
+
+	err := app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, err)
+		return
+	}
+
+	_, err = g.Queue.Move(input.From, input.To)
+	if err != nil {
+		// TODO handle error
+	}
+	app.writeJSON(w, 202, "accepted")
+}
+
+func (app *App) Clear(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	g := GetGuild(ps.ByName("ID"))
+	g.Queue.Clear()
+	app.writeJSON(w, 202, "accepted")
 }
 
 func (app *App) getServer(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	var input struct {
-		GuildID string `json:"guild_id"`
-	}
-
-	input.GuildID = r.URL.Query().Get("guild_id")
-	app.writeJSON(w, 200, GetGuild(input.GuildID))
+	app.writeJSON(w, 200, GetGuild(ps.ByName("ID")))
 }
