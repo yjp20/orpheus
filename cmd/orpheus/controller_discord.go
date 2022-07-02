@@ -210,6 +210,7 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		})
 		song, err := music.FetchFromURL(m.ApplicationCommandData().Options[0].StringValue(), false)
+		print(len(song))
 		if err != nil {
 			log.Printf("failed to add song\nerror: %s\n", err)
 			return
@@ -224,6 +225,9 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		})
 
 	case "addlist":
+		if g.Player.Voice == nil {
+			g.joinVoiceOfUser(s, m.GuildID, m.Member.User.ID)
+		}
 		err := s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 		})
@@ -273,6 +277,10 @@ func commandHandler(s *discordgo.Session, m *discordgo.InteractionCreate) {
 		response = formatCurrentSong("Fast-forwarded", g)
 
 	case "rewind":
+		if g.Queue.CurrentItem() == nil {
+			response = "Not playing any song to rewind"
+			break
+		}
 		seconds := m.ApplicationCommandData().Options[0].FloatValue()
 		g.Player.FastForward(-seconds)
 		response = formatCurrentSong("Rewound", g)

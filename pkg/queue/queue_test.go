@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -48,6 +49,10 @@ type removeEvent struct {
 	policy AddPolicy
 }
 
+type skipEvent struct {
+	skip int
+}
+
 type test struct {
 	events []interface{}
 	ans    []*music.Song
@@ -76,10 +81,10 @@ var tests = []test{
 		},
 		[]*music.Song{
 			mathPodcast1,
-			flyMeToTheMoon,
 			mathPodcast3,
-			justTheTwoOfUs,
+			flyMeToTheMoon,
 			mathPodcast5,
+			justTheTwoOfUs,
 		},
 	},
 	{
@@ -108,10 +113,10 @@ var tests = []test{
 		},
 		[]*music.Song{
 			catchMeIfYouCan,
-			rickRoll,
 			helloWorld,
-			strange,
+			rickRoll,
 			marshmary,
+			strange,
 			empireStateOfMind,
 			kekkaiSensen,
 		},
@@ -128,33 +133,52 @@ var tests = []test{
 			catchMeIfYouCan,
 			rickRoll,
 			kekkaiSensen,
-			empireStateOfMind,
 			helloWorld,
+			empireStateOfMind,
 			marshmary,
 			flyMeToTheMoon,
+		},
+	},
+	{
+		[]interface{}{
+			addEvent{[]*music.Song{empireStateOfMind}, "mycho", Smart},
+			addEvent{[]*music.Song{rickRoll}, "mycho", Smart},
+			skipEvent{1},
+			addEvent{[]*music.Song{catchMeIfYouCan, helloWorld, marshmary}, "mycho", Smart},
+		},
+		[]*music.Song{
+			empireStateOfMind,
+			rickRoll,
+			catchMeIfYouCan,
+			helloWorld,
+			marshmary,
 		},
 	},
 }
 
 func TestQueue(t *testing.T) {
-	for _, test := range tests {
-		queue := NewQueue()
-		for i, event := range test.events {
-			t.Logf("%d", i)
-			switch e := event.(type) {
-			case addEvent:
-				queue.Add(e.songs, e.user, false, e.policy)
+	for idx, test := range tests {
+		t.Run(fmt.Sprintf("test %d", idx), func(t *testing.T) {
+			queue := NewQueue()
+			for i, event := range test.events {
+				t.Logf("%d", i)
+				switch e := event.(type) {
+				case addEvent:
+					queue.Add(e.songs, e.user, false, e.policy)
+				case skipEvent:
+					queue.SkipTo((queue.Index + e.skip) % len(queue.List))
+				}
+				t.Logf("%s", queue.debugQueue())
 			}
-			t.Logf("%s", queue.debugQueue())
-		}
-		if len(queue.List) != len(test.ans) {
-			t.Errorf("Expected queue of length '%d', got '%d'", len(test.ans), len(queue.List))
-		}
-		for i, item := range queue.List {
-			if item.Song != test.ans[i] {
-				t.Errorf("Expected song '%s' at index '%d', got '%s'", test.ans[i].Name, i, item.Song.Name)
+			if len(queue.List) != len(test.ans) {
+				t.Errorf("Expected queue of length '%d', got '%d'", len(test.ans), len(queue.List))
 			}
-		}
+			for i, item := range queue.List {
+				if item.Song != test.ans[i] {
+					t.Errorf("Expected song '%s' at index '%d', got '%s'", test.ans[i].Name, i, item.Song.Name)
+				}
+			}
+		})
 	}
 }
 

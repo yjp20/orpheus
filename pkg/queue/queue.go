@@ -43,10 +43,10 @@ const (
 
 func NewQueue() Queue {
 	return Queue{
-		Index:         -1,
-		List:          []*QueueItem{},
-		NextPolicy:    NoLoop,
-		Dynamic:       0,
+		Index:      -1,
+		List:       []*QueueItem{},
+		NextPolicy: NoLoop,
+		Dynamic:    0,
 	}
 }
 
@@ -84,10 +84,10 @@ func (q *Queue) Add(songs []*music.Song, userId string, shuffle bool, policy Add
 		}
 		q.Dynamic = 0
 	case Smart:
-		start := max(q.Index, 0)
+		start := q.Index + 1
 		for i := start; i < q.Dynamic; i++ {
 			if q.List[i].QueuedBy == userId {
-				start = i
+				start = i + 1
 			}
 		}
 		for i := 0; i < start; i++ {
@@ -135,7 +135,21 @@ func (q *Queue) Move(from, to int) (*QueueItem, error) {
 	}
 	q.Dynamic = 0
 	target := q.List[from]
-	q.List = append(q.List[:from], q.List[from+1:]...)
+	list := make([]*QueueItem, len(q.List))
+	offset := 0
+	for i := 0; i < len(q.List); i++ {
+		if i == to {
+			offset -= 1
+			list[i] = q.List[from]
+		} else {
+			list[i] = q.List[i+offset]
+		}
+		if i == from {
+			offset += 1
+		}
+	}
+	q.List = list
+	q.update()
 	return target, nil
 }
 
